@@ -1,0 +1,40 @@
+[package]
+name = "cleitonq"
+version = "0.1.0"
+edition = "2021"
+authors = ["Cleiton Augusto Correa Bezerra <augusto.cleiton@gmail.com>"]
+description = "Post-quantum authenticated command & control for embedded and autonomous systems"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cleiton/CleitonQ"
+homepage = "https://github.com/cleiton/CleitonQ"
+documentation = "https://docs.rs/cleitonq"
+readme = "README.md"
+keywords = ["post-quantum", "cryptography", "embedded", "mavlink", "security"]
+categories = ["cryptography", "embedded", "network-programming"]
+rust-version = "1.75"
+
+[dependencies]
+# Post-quantum cryptography — NIST FIPS 203/204
+ml-kem = { version = "0.3", features = ["getrandom"] }
+ml-dsa = { version = "0.1", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+# Symmetric authentication
+hmac = "0.12"
+sha3 = "0.10"
+
+# Utility
+zeroize = { version = "1.7", features = ["derive"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+hex = "0.4"
+
+[[bench]]
+name = "pqc_bench"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
