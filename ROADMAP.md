@@ -57,18 +57,30 @@ ArduPilot e PX4. Ser citado.
 
 ### Tarefas de reconhecimento
 
-- [ ] **Paper no IACR ePrint:**
-  *"CleitonQ: Post-Quantum Authenticated C2 for MAVLink —
-   ML-KEM-1024 Session Establishment and ML-DSA-87 Command Signing"*
-  - Seções: threat model, protocol design, implementation, evaluation, security analysis
-  - 8–10 páginas, formato IEEE
+**Ordem importa.** Publicar e esperar (crates.io, paper isolado, post sem gancho)
+não gera reconhecimento — só existência passiva. Reconhecimento vem de alguém
+com audiência própria respondendo/validando publicamente. Por isso o passo 1
+abaixo vem antes do paper, não depois: o paper cita a resposta deles, não o
+contrário.
 
-- [ ] Post em `discuss.ardupilot.org` com link para o paper
-- [ ] Issue/Discussion em `github.com/mavlink/mavlink`:
-  *"Proposal: PQC message authentication extension for MAVLink v3"*
-- [ ] Post no Hacker News: "Show HN: CleitonQ — PQC for drone C2 in Rust"
+1. [ ] **Issue/Discussion em `github.com/mavlink/mavlink`** (gancho primeiro):
+   *"Proposal: PQC message authentication extension for MAVLink v3"*
+   — pergunta objetiva e técnica sobre o roadmap deles para PQC, com a
+   implementação de referência e os números medidos como evidência.
+   Isso obriga uma resposta de quem já tem audiência (maintainers), que é
+   o evento de distribuição real — sem isso, paper e HN não têm tração.
 
-**Entrega:** `v0.2.0` + paper no IACR ePrint
+2. [ ] **Paper no IACR ePrint** (com a resposta/discussão acima como evidência):
+   *"CleitonQ: Post-Quantum Authenticated C2 for MAVLink —
+    ML-KEM-1024 Session Establishment and ML-DSA-87 Command Signing"*
+   - Seções: threat model, protocol design, implementation, evaluation, security analysis
+   - 8–10 páginas, formato IEEE
+
+3. [ ] Post em `discuss.ardupilot.org` com link para o paper + a issue
+4. [ ] Post no Hacker News, só depois de ter algo concreto para mostrar
+   (resposta de maintainer, ou paper publicado) — nunca "Show HN" vazio
+
+**Entrega:** `v0.2.0` + resposta da comunidade MAVLink + paper no IACR ePrint
 
 ---
 
@@ -142,6 +154,31 @@ ArduPilot e PX4. Ser citado.
   Workshop de 2 dias: "Migrando sistemas autônomos para PQC"
 
 **Entrega:** `v1.0.0` + primeiro cliente pagante
+
+---
+
+## Fase 5 — Expansão horizontal `[2026 H2+, condicional]`
+
+**Pré-condição:** só inicia depois que o playbook (autoridade → padrão → mercado)
+funcionar comprovadamente em drones/MAVLink. Não executar em paralelo —
+diluir foco agora é o erro que já matou reconhecimento de projetos anteriores.
+
+A biblioteca `cleitonq` (`kem.rs`, `dsa.rs`, `channel.rs`) já é agnóstica de
+protocolo — MAVLink foi só o primeiro alvo porque havia contexto (Laminar).
+O mesmo gap de PQC existe em outros verticais com a mesma estrutura de
+problema (protocolo binário, link não confiável, custo alto de breach):
+
+| Vertical | Protocolo | Gatekeeper equivalente ao MAVLink |
+|---|---|---|
+| Robótica | ROS2/DDS | Open Robotics, comunidade ROS |
+| Veicular/automotivo | CAN bus, UAVCAN | UAVCAN/DroneCAN working group |
+| Industrial/SCADA | Modbus, OPC-UA | ISA, fornecedores de PLC |
+| IoT | MQTT, CoAP | OASIS, Eclipse Foundation |
+
+Replicar exatamente o mesmo movimento: issue técnica no repositório do
+protocolo → resposta de maintainer → paper específico do vertical → RFC.
+Não é reescrever a lib — é reaplicar a Fase 2 do roadmap em cada novo alvo,
+um por vez, só depois que o anterior gerar tração mensurável.
 
 ---
 
