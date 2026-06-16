@@ -147,12 +147,16 @@ impl std::error::Error for Error {}
 mod tests {
     use super::*;
 
+    fn ss_bytes(ss: &impl AsRef<[u8]>) -> Vec<u8> {
+        ss.as_ref().to_vec()
+    }
+
     #[test]
     fn test_encap_decap_shared_secret_matches() {
         let (dk, ek) = MlKem1024::generate_keypair();
         let (ct, k_gs) = ek.encapsulate();
         let k_drone = dk.try_decapsulate(&ct).expect("decapsulation must succeed");
-        assert_eq!(k_gs.as_ref(), k_drone.as_ref(), "shared secrets must match");
+        assert_eq!(ss_bytes(&k_gs), ss_bytes(&k_drone), "shared secrets must match");
     }
 
     #[test]
@@ -163,7 +167,7 @@ mod tests {
         // ML-KEM is implicitly rejection-sampled — wrong CT yields a different
         // (but still valid-looking) key, not an error. This is by design (IND-CCA2).
         let k_wrong = dk.try_decapsulate(&ct).unwrap();
-        assert_ne!(k_real.as_ref(), k_wrong.as_ref());
+        assert_ne!(ss_bytes(&k_real), ss_bytes(&k_wrong));
     }
 
     #[test]
@@ -179,7 +183,7 @@ mod tests {
 
         let (ct, k_gs) = ek.encapsulate();
         let k_drone = dk.try_decapsulate(&ct).unwrap();
-        assert_eq!(k_gs.as_ref(), k_drone.as_ref());
+        assert_eq!(ss_bytes(&k_gs), ss_bytes(&k_drone));
 
         fs::remove_file(dk_path).ok();
         fs::remove_file(ek_path).ok();

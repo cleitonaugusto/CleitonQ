@@ -38,10 +38,10 @@
 //! ### Command signing with non-repudiation (ML-DSA-87)
 //!
 //! ```no_run
-//! use cleitonq::prelude::*;
+//! use cleitonq::dsa::{SigningKey, VerifyingKey};
 //!
 //! // Ground station
-//! let sk = dsa::SigningKey::generate();
+//! let sk = SigningKey::generate();
 //! let packet = sk.sign(b"waypoint=100,80,50", 1);
 //!
 //! // Drone

@@ -113,7 +113,8 @@ impl VerifyingKey {
     /// Saves the verifying key to a file.
     pub fn save(&self, path: &str) -> Result<(), Error> {
         let encoded = self.0.encode();
-        std::fs::write(path, encoded.as_ref()).map_err(Error::Io)
+        let bytes: &[u8] = encoded.as_ref();
+        std::fs::write(path, bytes).map_err(Error::Io)
     }
 
     /// Verifies a signed packet and extracts `(payload, nonce)`.
