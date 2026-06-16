@@ -1,0 +1,42 @@
+name: ARM64 benchmarks
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  bench:
+    # Native ARM64 GitHub-hosted runner — free for public repos, no
+    # self-hosted hardware or cloud account needed.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Record host CPU info
+        run: |
+          uname -m
+          lscpu | tee cpu_info.txt
+
+      - name: Run benchmarks
+        run: cargo bench --bench pqc_bench 2>&1 | tee bench_output.txt
+
+      - name: Write job summary
+        run: |
+          echo "## ARM64 benchmark results" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          uname -m >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(Model name|Architecture|CPU\(s\))" cpu_info.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat bench_output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-bench-results
+          path: |
+            bench_output.txt
+            cpu_info.txt
+            target/criterion
