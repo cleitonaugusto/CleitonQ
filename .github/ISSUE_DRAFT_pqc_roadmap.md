@@ -1,12 +1,10 @@
 <!--
-  RASCUNHO — não publicado ainda. Abrir manualmente em:
+  Pronto para publicar. Abrir manualmente em:
   https://github.com/mavlink/mavlink/issues/new
-  (ou via `gh issue create --repo mavlink/mavlink` depois de revisar)
+  (ou via `gh issue create --repo mavlink/mavlink --title "..." --body-file ...`)
 
-  Pendências antes de publicar:
-  - [ ] números de hardware ARM real (Raspberry Pi 5 ou similar) — hoje só
-        temos x86-64 desktop
-  - [ ] revisão final do texto pelo Cleiton
+  Repo CleitonQ já é público com release v0.1.0 — o link no corpo abaixo resolve.
+  ARM benchmarks seguem pendentes (sem hardware); o texto já é honesto sobre isso.
 -->
 
 ## Title
