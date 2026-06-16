@@ -46,7 +46,8 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   - [x] Wrapper para `COMMAND_LONG`, `SET_POSITION_TARGET_LOCAL_NED` — frames
     reais (header + payload + CRC), não mais struct simulada
   - [ ] Teste com QGroundControl via MAVProxy (link real, pendente)
-- [ ] `nonce.rs` — `AtomicNonce` thread-safe para loops de controle
+- [x] `nonce.rs` — `AtomicNonce` (geração) e `NonceTracker` (anti-replay)
+  thread-safe para loops de controle concorrentes
 - [ ] Suporte a `no_std` (base para microcontroladores)
 - [x] Fuzzing dos verificadores de pacotes (cargo-fuzz, `fuzz/fuzz_targets/`)
   — sem crashes em milhões de execuções até o momento

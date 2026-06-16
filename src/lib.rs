@@ -66,6 +66,7 @@
 pub mod channel;
 pub mod dsa;
 pub mod kem;
+pub mod nonce;
 pub mod rotation;
 
 /// Convenience re-exports for the most common types.
@@ -73,6 +74,7 @@ pub mod prelude {
     pub use crate::channel::{AuthChannel, ChannelDomain};
     pub use crate::dsa::{SigningKey, VerifyingKey};
     pub use crate::kem;
+    pub use crate::nonce::{AtomicNonce, NonceTracker};
     pub use crate::rotation::{KeyId, KeyRegistry, RotatingSigningKey};
 }
 
