@@ -1,0 +1,29 @@
+[package]
+name = "cleitonq-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+once_cell = "1"
+
+[dependencies.cleitonq]
+path = ".."
+
+[[bin]]
+name = "fuzz_verify_channel"
+path = "fuzz_targets/fuzz_verify_channel.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verify_dsa"
+path = "fuzz_targets/fuzz_verify_dsa.rs"
+test = false
+doc = false
+bench = false

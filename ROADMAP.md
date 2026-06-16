@@ -48,7 +48,16 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   - [ ] Teste com QGroundControl via MAVProxy (link real, pendente)
 - [ ] `nonce.rs` — `AtomicNonce` thread-safe para loops de controle
 - [ ] Suporte a `no_std` (base para microcontroladores)
-- [ ] Fuzzing do verificador de pacotes (cargo-fuzz)
+- [x] Fuzzing dos verificadores de pacotes (cargo-fuzz, `fuzz/fuzz_targets/`)
+  — sem crashes em milhões de execuções até o momento
+- [x] Testes de MITM ativo (`tests/mitm_active.rs`): substituição de
+  ciphertext entre sessões, replay cross-session, splicing de assinatura
+- [x] Testes de exaustão de recursos (`tests/dos_stress.rs`): pacotes
+  malformados em volume, pacotes de até 16MiB, flood de pacotes forjados
+- [x] `rotation.rs` — rotação e revogação de chave ML-DSA-87
+  (`KeyRegistry`/`RotatingSigningKey`), sem mudar o formato de wire do
+  `dsa.rs` existente
+- [x] `SECURITY.md` — gaps conhecidos documentados honestamente
 
 ### Comunidade
 
