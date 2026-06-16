@@ -108,14 +108,20 @@ coming in v0.2 — see [ROADMAP.md](ROADMAP.md).
 
 | Operation | Latency | Notes |
 |---|---|---|
-| ML-KEM-1024 encapsulate | ~200 µs | One-time per session |
-| ML-KEM-1024 decapsulate | ~200 µs | One-time per session |
-| ML-DSA-87 sign | ~1.5 ms | Per signed command |
-| ML-DSA-87 verify | ~1.8 ms | Per received command |
-| HMAC-SHA3-256 sign | < 5 µs | Per packet at 100 Hz |
-| HMAC-SHA3-256 verify | < 5 µs | Per packet at 100 Hz |
+| ML-KEM-1024 keygen | 100.2 µs | One-time at provisioning |
+| ML-KEM-1024 encapsulate | 95.5 µs | One-time per session |
+| ML-KEM-1024 decapsulate | 125.6 µs | One-time per session |
+| ML-DSA-87 sign (40B) | 1.23 ms | Per signed command |
+| ML-DSA-87 verify (40B) | 121.5 µs | Per received command |
+| ML-DSA-87 sign (256B) | 455.3 µs | Per signed command (MAVLink-sized) |
+| ML-DSA-87 verify (256B) | 115.9 µs | Per received command |
+| HMAC-SHA3-256 sign | 2.50 µs | Per packet at 100 Hz |
+| HMAC-SHA3-256 verify | 2.37 µs | Per packet at 100 Hz |
+| Full session establishment | 304.6 µs | Encap + decap + channel init |
 
-**At 100 Hz, the per-packet HMAC overhead is negligible (<0.05% of cycle budget).**
+*(Median of 100 samples, Criterion. Run `cargo bench` to reproduce.)*
+
+**At 100 Hz, the per-packet HMAC overhead is negligible (<0.03% of cycle budget).**
 ML-DSA-87 is used for high-value commands (waypoints, arm/disarm), not every telemetry packet.
 
 ### Packet overhead

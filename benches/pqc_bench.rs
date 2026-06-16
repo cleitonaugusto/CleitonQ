@@ -12,7 +12,7 @@ use cleitonq::{
     dsa::SigningKey,
     kem::{self, KemKeyPair},
 };
-use ml_kem::{kem::Encapsulate, MlKem1024};
+use ml_kem::{kem::Encapsulate, Kem, MlKem1024};
 
 fn bench_kem(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM-1024");

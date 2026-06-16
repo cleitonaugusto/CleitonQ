@@ -25,8 +25,8 @@ objetivo de reconhecimento e objetivo financeiro.
 - [x] `examples/mavlink_c2.rs` — integração MAVLink
 - [x] `benches/pqc_bench.rs` — benchmarks Criterion
 - [x] `README.md` — documento de marketing técnico
-- [ ] `cargo test --workspace` — todos passando
-- [ ] `cargo bench` — coletar números reais
+- [x] `cargo test --workspace` — todos passando (21/21)
+- [x] `cargo bench` — coletar números reais
 - [ ] Publicar no `crates.io`
 - [ ] Publicar documentação no `docs.rs`
 
