@@ -48,12 +48,12 @@ MAVProxy, `mavlink-router`, QGroundControl acting as a relay, or any GCS
 that re-serializes messages instead of passing raw bytes through.
 
 This is an architecture constraint, not a bug to patch — fixing it
-requires encoding the signature as a proper MAVLink construct (e.g. a
-dedicated message type carried alongside the signed message) so a
-relay forwards it as a first-class frame instead of discarding it as
-trailing garbage. This must be resolved before the Fase 3 MAVLink RFC
-proposal, since most real deployments route through exactly this kind
-of middleware.
+requires a redesign of the wire format so that the authenticated payload
+is treated as a first-class MAVLink construct rather than opaque trailing
+bytes, allowing relay hops to forward it intact. The design for this
+redesign is tracked separately and will be part of a future RFC proposal.
+Most real deployments route through exactly this kind of middleware, so
+this must be resolved before any standardization effort.
 
 ## Known gaps (not yet resolved)
 
