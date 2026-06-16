@@ -24,7 +24,7 @@ transport wrapper someone bolts on) would need post-quantum primitives to stay
 useful past the "harvest now, decrypt later" horizon that NIST and NSA CNSA 2.0
 guidance are already planning around for government/defense procurement.
 
-I built a small reference implementation — [CleitonQ](https://github.com/cleiton/CleitonQ)
+I built a small reference implementation — [CleitonQ](https://github.com/cleitonaugusto/CleitonQ)
 — that wraps MAVLink v2 frames (`COMMAND_LONG`, `SET_POSITION_TARGET_LOCAL_NED`,
 tested against the official `mavlink` / rust-mavlink crate's real wire format)
 with:
