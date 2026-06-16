@@ -45,7 +45,13 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   oficial `mavlink` / github.com/mavlink/rust-mavlink)
   - [x] Wrapper para `COMMAND_LONG`, `SET_POSITION_TARGET_LOCAL_NED` — frames
     reais (header + payload + CRC), não mais struct simulada
-  - [ ] Teste com QGroundControl via MAVProxy (link real, pendente)
+  - [x] Teste com socket UDP real (`examples/mavlink_udp_link.rs`) —
+    achou e corrigiu um bug real de buffer (ver `SECURITY.md`)
+  - [x] Teste com MAVProxy como relay — **achado importante**: o formato
+    atual (assinatura anexada após o frame) não sobrevive a um relay
+    MAVLink-aware (MAVProxy, mavlink-router, QGroundControl como proxy).
+    Só funciona em link direto ponto-a-ponto. Detalhe completo em
+    `SECURITY.md`. Isso precisa ser resolvido antes do RFC da Fase 3.
 - [x] `nonce.rs` — `AtomicNonce` (geração) e `NonceTracker` (anti-replay)
   thread-safe para loops de controle concorrentes
 - [ ] Suporte a `no_std` (base para microcontroladores)

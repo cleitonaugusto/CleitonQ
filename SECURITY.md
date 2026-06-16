@@ -21,6 +21,39 @@ should know before relying on it.
   volume, oversized packets (tens of MiB), and floods of correctly-sized
   forged ML-DSA packets — verified to reject in bounded time without
   panicking.
+- **Real socket round-trip** (`examples/mavlink_udp_link.rs`): signed
+  MAVLink v2 frames sent over an actual `UdpSocket` (not just in-memory
+  byte arrays), including replay and tamper rejection across the socket
+  boundary. This caught a real bug during development: a receive buffer
+  sized at 4096 bytes silently truncated packets, since an ML-DSA-87
+  signature alone is 4627 bytes — fixed by sizing the buffer against
+  `dsa::OVERHEAD`. Any integration using a fixed-size UDP receive buffer
+  must size it to fit `dsa::OVERHEAD` (or `channel::OVERHEAD`) plus the
+  largest expected payload.
+
+## Known architecture limitation: doesn't survive MAVLink-aware relays
+
+Tested against MAVProxy (acting as a UDP-to-UDP relay): a MAVLink v2
+frame with extra trailing bytes appended (standing in for CleitonQ's
+`nonce + signature` suffix) was received intact by MAVProxy but
+**re-serialized and forwarded without the trailing bytes** — MAVProxy
+parses discrete MAVLink messages and forwards exactly the recognized
+frame, silently dropping anything appended after it.
+
+This means the current wire format — sign the serialized MAVLink frame,
+append `nonce + signature` after it — **only works over a direct,
+unrouted link** (point-to-point UDP/serial, no intermediary). It does
+**not** survive any topology with a MAVLink-aware hop in between:
+MAVProxy, `mavlink-router`, QGroundControl acting as a relay, or any GCS
+that re-serializes messages instead of passing raw bytes through.
+
+This is an architecture constraint, not a bug to patch — fixing it
+requires encoding the signature as a proper MAVLink construct (e.g. a
+dedicated message type carried alongside the signed message) so a
+relay forwards it as a first-class frame instead of discarding it as
+trailing garbage. This must be resolved before the Fase 3 MAVLink RFC
+proposal, since most real deployments route through exactly this kind
+of middleware.
 
 ## Known gaps (not yet resolved)
 
