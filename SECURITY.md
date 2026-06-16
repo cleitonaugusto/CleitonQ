@@ -57,9 +57,11 @@ of middleware.
 
 ## Known gaps (not yet resolved)
 
-- **No ARM/embedded benchmarks.** All numbers in `README.md` are x86_64
-  desktop measurements. Flight-computer-class hardware (e.g. Raspberry Pi
-  5 / Cortex-A76, STM32) has not been benchmarked.
+- **ARM benchmarks are server-class, not embedded-class.** `README.md` has
+  numbers from a native ARM64 GitHub Actions runner (Neoverse-N2, via
+  `.github/workflows/arm-bench.yml`) — real ARM silicon, not emulated, but
+  a server/cloud core, not a flight-computer-class chip. Cortex-A76
+  (Raspberry Pi 5) or STM32-class microcontroller numbers are still open.
 - **No `no_std` support.** Current API requires `std` (file I/O for key
   storage, heap allocation). Microcontroller targets are not supported yet.
 - **No HSM integration.** The ML-DSA-87 signing key lives in process

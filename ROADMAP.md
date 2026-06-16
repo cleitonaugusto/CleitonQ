@@ -68,9 +68,10 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
 
 ### Comunidade
 
-- [ ] Issue/Discussion em `github.com/mavlink/mavlink`: pergunta técnica sobre
+- [x] Issue em `github.com/mavlink/mavlink` — aberta em 2026-06-16:
+  https://github.com/mavlink/mavlink/issues/2525 — pergunta técnica sobre
   o roadmap de PQC do projeto, com a implementação de referência e os
-  números medidos como evidência.
+  números medidos como evidência. Aguardando resposta dos maintainers.
 - [ ] Paper técnico (IACR ePrint): threat model, protocol design,
   implementation, evaluation, security analysis.
 - [ ] Post em `discuss.ardupilot.org` com link para o paper e a discussão.

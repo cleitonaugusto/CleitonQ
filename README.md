@@ -103,25 +103,27 @@ cargo run --example keygen -- --out pq_keys/
 
 ## Performance
 
-Measured on x86-64 (Intel Core i5, release build). ARM benchmarks (Raspberry Pi 5)
-coming in v0.2 — see [ROADMAP.md](ROADMAP.md).
+Measured with Criterion (median of 100 samples, release build). Run
+`cargo bench` to reproduce. ARM64 numbers are from a native
+`ubuntu-24.04-arm` GitHub Actions runner (Neoverse-N2) — a server-class
+ARM core, not yet a Cortex-A-class embedded flight computer (e.g.
+Raspberry Pi 5); that comparison is still open, see
+[ROADMAP.md](ROADMAP.md).
 
-| Operation | Latency | Notes |
-|---|---|---|
-| ML-KEM-1024 keygen | 100.2 µs | One-time at provisioning |
-| ML-KEM-1024 encapsulate | 95.5 µs | One-time per session |
-| ML-KEM-1024 decapsulate | 125.6 µs | One-time per session |
-| ML-DSA-87 sign (40B) | 1.23 ms | Per signed command |
-| ML-DSA-87 verify (40B) | 121.5 µs | Per received command |
-| ML-DSA-87 sign (256B) | 455.3 µs | Per signed command (MAVLink-sized) |
-| ML-DSA-87 verify (256B) | 115.9 µs | Per received command |
-| HMAC-SHA3-256 sign | 2.50 µs | Per packet at 100 Hz |
-| HMAC-SHA3-256 verify | 2.37 µs | Per packet at 100 Hz |
-| Full session establishment | 304.6 µs | Encap + decap + channel init |
+| Operation | x86-64 (Intel Core i5) | ARM64 (Neoverse-N2) | Notes |
+|---|---|---|---|
+| ML-KEM-1024 keygen | 100.2 µs | 77.1 µs | One-time at provisioning |
+| ML-KEM-1024 encapsulate | 95.5 µs | 70.5 µs | One-time per session |
+| ML-KEM-1024 decapsulate | 125.6 µs | 84.3 µs | One-time per session |
+| ML-DSA-87 sign (40B) | 1.23 ms | 962.2 µs | Per signed command |
+| ML-DSA-87 verify (40B) | 121.5 µs | 84.4 µs | Per received command |
+| ML-DSA-87 sign (256B) | 455.3 µs | 509.1 µs | Per signed command (MAVLink-sized) |
+| ML-DSA-87 verify (256B) | 115.9 µs | 85.3 µs | Per received command |
+| HMAC-SHA3-256 sign | 2.50 µs | 1.10 µs | Per packet at 100 Hz |
+| HMAC-SHA3-256 verify | 2.37 µs | 1.12 µs | Per packet at 100 Hz |
+| Full session establishment | 304.6 µs | 241.1 µs | Encap + decap + channel init |
 
-*(Median of 100 samples, Criterion. Run `cargo bench` to reproduce.)*
-
-**At 100 Hz, the per-packet HMAC overhead is negligible (<0.03% of cycle budget).**
+**At 100 Hz, the per-packet HMAC overhead is negligible (<0.03% of cycle budget) on both architectures.**
 ML-DSA-87 is used for high-value commands (waypoints, arm/disarm), not every telemetry packet.
 
 ### Packet overhead
