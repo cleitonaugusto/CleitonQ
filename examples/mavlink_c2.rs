@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! CleitonQ MAVLink v2 integration example.
 //!
 //! Uses the official `mavlink` crate (github.com/mavlink/rust-mavlink) to build

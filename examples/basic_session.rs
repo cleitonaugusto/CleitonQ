@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! Basic CleitonQ session example.
 //!
 //! Demonstrates a full ML-KEM session establishment + HMAC-authenticated

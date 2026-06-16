@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! Authenticated channel combining ML-KEM session key + HMAC-SHA3-256.
 //!
 //! `AuthChannel` is the high-level API for most integrations. It wraps a
