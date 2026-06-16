@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! ML-DSA-87 command signing and verification (NIST FIPS 204).
 //!
 //! Provides unforgeable, quantum-resistant signatures for C2 commands and

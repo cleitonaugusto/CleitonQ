@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! # CleitonQ
 //!
 //! **Post-quantum authenticated command & control for embedded and autonomous systems.**

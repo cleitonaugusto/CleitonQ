@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+
 //! ML-KEM-1024 session key establishment (NIST FIPS 203).
 //!
 //! Provides forward-secret session keys for authenticating C2 channels.
