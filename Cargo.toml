@@ -29,6 +29,7 @@ zeroize = { version = "1.7", features = ["derive"] }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 hex = "0.4"
+mavlink = { version = "0.18", default-features = false, features = ["std", "dialect-common"] }
 
 [[bench]]
 name = "pqc_bench"

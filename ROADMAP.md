@@ -45,12 +45,16 @@ ArduPilot e PX4. Ser citado.
 
 ### Tarefas técnicas
 
-- [ ] Benchmarks no Raspberry Pi 5 (ARM Cortex-A76)
+- [ ] Benchmarks no Raspberry Pi 5 (ARM Cortex-A76) — pendente, sem hardware
+  ARM disponível no momento (2026-06-16). Issue do MAVLink segue sem esses
+  números; adicionar quando houver acesso a um dispositivo real.
   - Latência ML-KEM e ML-DSA em hardware embarcado real
   - Comparação com ECDSA/X25519 atual do MAVLink
-- [ ] Integração real com MAVLink v2
-  - Wrapper para `COMMAND_LONG`, `SET_POSITION_TARGET_LOCAL_NED`
-  - Teste com QGroundControl via MAVProxy
+- [x] Integração real com MAVLink v2 (`examples/mavlink_c2.rs`, usando o crate
+  oficial `mavlink` / github.com/mavlink/rust-mavlink)
+  - [x] Wrapper para `COMMAND_LONG`, `SET_POSITION_TARGET_LOCAL_NED` — frames
+    reais (header + payload + CRC), não mais struct simulada
+  - [ ] Teste com QGroundControl via MAVProxy (link real, pendente)
 - [ ] `nonce.rs` — `AtomicNonce` thread-safe para loops de controle
 - [ ] Suporte a `no_std` (base para microcontroladores)
 - [ ] Fuzzing do verificador de pacotes (cargo-fuzz)
