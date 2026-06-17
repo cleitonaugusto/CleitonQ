@@ -72,8 +72,8 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   https://github.com/mavlink/mavlink/issues/2525 — pergunta técnica sobre
   o roadmap de PQC do projeto, com a implementação de referência e os
   números medidos como evidência. Aguardando resposta dos maintainers.
-- [ ] Paper técnico (IACR ePrint): threat model, protocol design,
-  implementation, evaluation, security analysis.
+- [x] Paper técnico (IACR ePrint): threat model, protocol design,
+  implementation, evaluation, security analysis. Submitted June 2026.
 - [ ] Post em `discuss.ardupilot.org` com link para o paper e a discussão.
 
 **Entrega:** `v0.2.0`
@@ -140,11 +140,11 @@ com link não confiável e custo alto de breach:
 ## Visão de longo prazo
 
 ```
-2025 Q1  CleitonQ v0.1 no crates.io
-2025 Q3  Diálogo técnico com comunidades MAVLink/ArduPilot
-2025 Q4  RFC MAVLink
-2026 Q1  Adoção avaliada por ArduPilot ou PX4
-2026 Q2  v1.0 auditado
+2026 Q2  Paper submetido ao IACR ePrint
+2026 Q2  Diálogo técnico iniciado — MAVLink issue #2525, reunião de dev 17/06
+2026 Q3  RFC MAVLink formal
+2026 Q4  Adoção avaliada por ArduPilot ou PX4
+2027 Q2  v1.0 auditado
 ```
 
 — Cleiton Augusto Correa Bezerra

@@ -50,10 +50,12 @@ that re-serializes messages instead of passing raw bytes through.
 This is an architecture constraint, not a bug to patch — fixing it
 requires a redesign of the wire format so that the authenticated payload
 is treated as a first-class MAVLink construct rather than opaque trailing
-bytes, allowing relay hops to forward it intact. The design for this
-redesign is tracked separately and will be part of a future RFC proposal.
-Most real deployments route through exactly this kind of middleware, so
-this must be resolved before any standardization effort.
+bytes, allowing relay hops to forward it intact. The proposed wire format
+(`CLEITONQ_SIGNED_CMD`, `CLEITONQ_SESSION_INIT`) is described in the
+technical paper (IACR ePrint, submitted June 2026) and will be the basis
+of a formal MAVLink RFC. Most real deployments route through exactly this
+kind of middleware, so this must be resolved before any standardization
+effort.
 
 ## Known gaps (not yet resolved)
 
