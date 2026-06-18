@@ -39,8 +39,8 @@ use zeroize::Zeroizing;
 
 /// Size of the ML-KEM-1024 public encapsulation key in bytes.
 pub const EK_BYTES: usize = 1568;
-/// Size of the decapsulation key seed stored on disk (derives the full key).
-pub const DK_SEED_BYTES: usize = 32;
+/// Size of the decapsulation key seed stored on disk (FIPS 203: d || z, two 32-byte values).
+pub const DK_SEED_BYTES: usize = 64;
 /// Size of the established shared secret (session key).
 pub const SESSION_KEY_BYTES: usize = 32;
 
@@ -106,6 +106,26 @@ pub fn encapsulate(ek_path: &str) -> Result<(Vec<u8>, SessionKey), Error> {
     let mut key = Zeroizing::new([0u8; SESSION_KEY_BYTES]);
     key.copy_from_slice(ss.as_ref());
     Ok((ct[..].to_vec(), key))
+}
+
+/// Encapsulate using raw EK bytes (C API / in-memory use, no file I/O).
+pub fn encapsulate_raw(ek_bytes: &[u8]) -> Result<(Vec<u8>, SessionKey), Error> {
+    let arr = ml_kem::array::Array::try_from(ek_bytes)
+        .map_err(|_| Error::InvalidKey(format!("expected {EK_BYTES} bytes for EK")))?;
+    let ek = EncapsulationKey::<MlKem1024>::new(&arr)
+        .map_err(|e| Error::InvalidKey(format!("invalid EK: {e}")))?;
+    let (ct, ss) = ek.encapsulate();
+    let mut key = Zeroizing::new([0u8; SESSION_KEY_BYTES]);
+    key.copy_from_slice(ss.as_ref());
+    Ok((ct[..].to_vec(), key))
+}
+
+/// Decapsulate using raw DK seed bytes (C API / in-memory use, no file I/O).
+pub fn decapsulate_from_seed(dk_seed: &[u8], ciphertext: &[u8]) -> Result<SessionKey, Error> {
+    let seed = ml_kem::array::Array::try_from(dk_seed)
+        .map_err(|_| Error::InvalidKey(format!("expected {DK_SEED_BYTES} bytes for DK seed")))?;
+    let dk = DecapsulationKey::<MlKem1024>::from_seed(seed);
+    decapsulate(&dk, ciphertext)
 }
 
 /// Drone: decapsulate the session key from the ground station's ciphertext.

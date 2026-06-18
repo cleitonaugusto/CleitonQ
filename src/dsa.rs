@@ -61,6 +61,23 @@ impl SigningKey {
         Self(ml_dsa::SigningKey::<MlDsa87>::generate())
     }
 
+    /// Constructs a signing key from a 32-byte seed (C API / in-memory use).
+    pub fn from_seed_bytes(seed: &[u8]) -> Result<Self, Error> {
+        let s = ml_dsa::Seed::try_from(seed)
+            .map_err(|_| Error::InvalidKey(format!(
+                "expected {SK_SEED_BYTES} bytes, got {}", seed.len()
+            )))?;
+        Ok(Self(ml_dsa::SigningKey::<MlDsa87>::from_seed(&s)))
+    }
+
+    /// Returns the 32-byte seed that can reconstruct this signing key.
+    pub fn to_seed_bytes(&self) -> [u8; SK_SEED_BYTES] {
+        let seed = self.0.to_seed();
+        let mut out = [0u8; SK_SEED_BYTES];
+        out.copy_from_slice(&seed[..]);
+        out
+    }
+
     /// Loads a signing key from a 32-byte seed file.
     pub fn load(path: &str) -> Result<Self, Error> {
         let bytes = std::fs::read(path).map_err(Error::Io)?;
@@ -102,6 +119,22 @@ impl SigningKey {
 pub struct VerifyingKey(ml_dsa::VerifyingKey<MlDsa87>);
 
 impl VerifyingKey {
+    /// Constructs a verifying key from raw 2592-byte encoding (C API / in-memory use).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let encoded = EncodedVerifyingKey::<MlDsa87>::try_from(bytes)
+            .map_err(|_| Error::InvalidKey(format!(
+                "expected {VK_BYTES} bytes, got {}", bytes.len()
+            )))?;
+        Ok(Self(ml_dsa::VerifyingKey::<MlDsa87>::decode(&encoded)))
+    }
+
+    /// Returns the raw 2592-byte verifying key encoding.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let encoded: EncodedVerifyingKey<MlDsa87> = self.0.encode();
+        let bytes: &[u8] = encoded.as_ref();
+        bytes.to_vec()
+    }
+
     /// Loads a verifying key from a 2592-byte file.
     pub fn load(path: &str) -> Result<Self, Error> {
         let bytes = std::fs::read(path).map_err(Error::Io)?;
