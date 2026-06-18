@@ -1,0 +1,12 @@
+/home/cleiton/projetos/CleitonQ/cleitonq-python/target/release/deps/spki-0d5c34ce56021f2a.d: /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/lib.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/algorithm.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/error.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/spki.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/traits.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/../README.md
+
+/home/cleiton/projetos/CleitonQ/cleitonq-python/target/release/deps/libspki-0d5c34ce56021f2a.rlib: /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/lib.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/algorithm.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/error.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/spki.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/traits.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/../README.md
+
+/home/cleiton/projetos/CleitonQ/cleitonq-python/target/release/deps/libspki-0d5c34ce56021f2a.rmeta: /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/lib.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/algorithm.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/error.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/spki.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/traits.rs /home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/../README.md
+
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/lib.rs:
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/algorithm.rs:
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/error.rs:
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/spki.rs:
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/traits.rs:
+/home/cleiton/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/spki-0.8.0/src/../README.md:
