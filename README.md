@@ -89,14 +89,22 @@ let (payload, nonce) = vk.verify(&packet, last_nonce).expect("valid command");
 
 ### Key generation (run once before deployment)
 
-```bash
-# Generate ML-KEM key pair for the drone
-cargo run --example keygen -- --out pq_keys/
+```rust
+use cleitonq::kem::KemKeyPair;
+use cleitonq::dsa::SigningKey;
 
-# The drone stores: pq_keys/drone_kem_dk.bin (PRIVATE)
-# The ground station gets: pq_keys/drone_kem_ek.bin (public)
-# The ground station stores: pq_keys/gs_signing.bin (PRIVATE)
-# The drone gets: pq_keys/gs_verifying.bin (public)
+// Drone: generate and save ML-KEM key pair
+let kp = KemKeyPair::generate();
+kp.save("drone_kem_dk.bin", "drone_kem_ek.bin").unwrap();
+// drone_kem_dk.bin → stays on the drone (PRIVATE)
+// drone_kem_ek.bin → share with ground station (public)
+
+// Ground station: generate ML-DSA-87 signing key
+let sk = SigningKey::generate();
+sk.save("gs_signing.bin").unwrap();
+sk.verifying_key().save("gs_verifying.bin").unwrap();
+// gs_signing.bin → stays at ground station (PRIVATE)
+// gs_verifying.bin → distribute to every drone (public)
 ```
 
 ---
@@ -144,7 +152,7 @@ acceptable for the infrequent high-value commands that justify non-repudiation.
 
 For telemetry streams (100 Hz+), use the HMAC channel with 40 bytes overhead.
 
-A formal MAVLink extension proposal (RFC) is planned for Q3 2025 — see [ROADMAP.md](ROADMAP.md).
+A formal MAVLink extension proposal (RFC) is planned for Q3 2026 — see [ROADMAP.md](ROADMAP.md).
 
 ---
 

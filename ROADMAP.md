@@ -29,7 +29,7 @@ Plano técnico do projeto, por fase.
 
 ---
 
-## Fase 2 — Validação (v0.2) `[Q3 2025]`
+## Fase 2 — Validação (v0.2) `[Q2–Q3 2026]`
 
 **Objetivo:** benchmarks em hardware ARM real, integração MAVLink testada,
 abrir diálogo técnico com a comunidade MAVLink sobre PQC.
@@ -72,15 +72,15 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   https://github.com/mavlink/mavlink/issues/2525 — pergunta técnica sobre
   o roadmap de PQC do projeto, com a implementação de referência e os
   números medidos como evidência. Aguardando resposta dos maintainers.
-- [x] Paper técnico (IACR ePrint): threat model, protocol design,
-  implementation, evaluation, security analysis. Submitted June 2026.
+- [x] Paper técnico: threat model, protocol design, implementation,
+  evaluation, security analysis. Preprint June 2026 (Zenodo/TechRxiv).
 - [ ] Post em `discuss.ardupilot.org` com link para o paper e a discussão.
 
 **Entrega:** `v0.2.0`
 
 ---
 
-## Fase 3 — Padronização (v0.3) `[Q4 2025]`
+## Fase 3 — Padronização (v0.3) `[Q4 2026]`
 
 **Objetivo:** suporte a confidencialidade, `no_std`, STM32.
 
@@ -105,7 +105,7 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
 
 ---
 
-## Fase 4 — Maturidade (v1.0) `[Q2 2026]`
+## Fase 4 — Maturidade (v1.0) `[2027]`
 
 **Objetivo:** produção-pronto, certificado, auditado.
 
@@ -114,8 +114,8 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
 - [ ] Auditoria de segurança por terceiros (Trail of Bits, NCC Group, ou equivalente)
 - [ ] Certificação FIPS 140-3 (módulo criptográfico)
 - [ ] Suporte a HSM (Nitrokey, YubiHSM) para proteção da signing key
-- [ ] SDK Python (`pip install cleitonq`) via PyO3
-- [ ] SDK C FFI para integração com sistemas legados
+- [x] SDK Python (`pip install cleitonq`) via PyO3 — `cleitonq-python/`
+- [x] SDK C FFI (`libcleitonq_capi.a` / `.so`) para integração com sistemas legados
 
 **Entrega:** `v1.0.0`
 
@@ -140,8 +140,9 @@ com link não confiável e custo alto de breach:
 ## Visão de longo prazo
 
 ```
-2026 Q2  Paper submetido ao IACR ePrint
-2026 Q2  Diálogo técnico iniciado — MAVLink issue #2525, reunião de dev 17/06
+2026 Q2  Paper publicado (preprint Zenodo/TechRxiv)
+2026 Q2  Diálogo técnico iniciado — MAVLink issue #2525
+2026 Q2  Python SDK (PyO3) e C FFI concluídos
 2026 Q3  RFC MAVLink formal
 2026 Q4  Adoção avaliada por ArduPilot ou PX4
 2027 Q2  v1.0 auditado
