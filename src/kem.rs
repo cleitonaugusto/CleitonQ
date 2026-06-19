@@ -60,10 +60,20 @@ impl KemKeyPair {
         Self { dk, ek }
     }
 
+    /// Returns the DK seed bytes (64 bytes: d‖z) without writing to disk.
+    pub fn dk_seed_bytes(&self) -> Result<[u8; DK_SEED_BYTES], Error> {
+        let seed = self.dk.to_seed().ok_or(Error::KeyExport)?;
+        let mut out = [0u8; DK_SEED_BYTES];
+        out.copy_from_slice(&seed[..]);
+        Ok(out)
+    }
+
+    /// Returns the encapsulation key bytes (1568 bytes).
+    pub fn ek_bytes(&self) -> Vec<u8> {
+        self.ek.to_bytes()[..].to_vec()
+    }
+
     /// Saves the key pair to disk.
-    ///
-    /// `dk_path` — private seed (32 bytes). Keep on the drone only.
-    /// `ek_path` — public encapsulation key (1568 bytes). Share with ground station.
     pub fn save(&self, dk_path: &str, ek_path: &str) -> Result<(), Error> {
         let seed = self.dk.to_seed().ok_or(Error::KeyExport)?;
         std::fs::write(dk_path, &seed[..]).map_err(Error::Io)?;

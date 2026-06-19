@@ -53,14 +53,9 @@ fn dsa_verify(py: Python<'_>, vk: &[u8], packet: &[u8], last_nonce: u64) -> PyRe
 #[pyfunction]
 fn kem_keygen(py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
     let kp = KemKeyPair::generate();
-    let dk_path = "/tmp/_cleitonq_py_dk.bin";
-    let ek_path = "/tmp/_cleitonq_py_ek.bin";
-    kp.save(dk_path, ek_path)
+    let dk = kp.dk_seed_bytes()
         .map_err(|e| PyValueError::new_err(format!("keygen failed: {e}")))?;
-    let dk = std::fs::read(dk_path).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let ek = std::fs::read(ek_path).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let _ = std::fs::remove_file(dk_path);
-    let _ = std::fs::remove_file(ek_path);
+    let ek = kp.ek_bytes();
     Ok((PyBytes::new_bound(py, &dk).into(), PyBytes::new_bound(py, &ek).into()))
 }
 
