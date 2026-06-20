@@ -152,7 +152,7 @@ acceptable for the infrequent high-value commands that justify non-repudiation.
 
 For telemetry streams (100 Hz+), use the HMAC channel with 40 bytes overhead.
 
-A formal MAVLink extension proposal (RFC) is planned for Q3 2026 — see [ROADMAP.md](ROADMAP.md).
+A formal MAVLink RFC was submitted in June 2026 — see [Issue #2527](https://github.com/mavlink/mavlink/issues/2527) and [PR #2528](https://github.com/mavlink/mavlink/pull/2528). Wire format spec and dialect XML in [rfc/](rfc/).
 
 ---
 

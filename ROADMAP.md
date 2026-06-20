@@ -22,7 +22,7 @@ Plano técnico do projeto, por fase.
 - [x] `README.md` — documentação
 - [x] `cargo test --workspace` — todos passando (21/21)
 - [x] `cargo bench` — coletar números reais
-- [ ] Publicar no `crates.io`
+- [x] Publicar no `crates.io` — v0.1.0 publicado em 2026-06-16
 - [ ] Publicar documentação no `docs.rs`
 
 **Entrega:** `v0.1.0` no crates.io
@@ -94,8 +94,9 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
 
 ### Padronização
 
-- [ ] **MAVLink RFC formal:** proposta de extensão do protocolo MAVLink
-  para PQC, submetida ao grupo de trabalho MAVLink no GitHub.
+- [x] **MAVLink RFC formal:** proposta de extensão do protocolo MAVLink
+  para PQC, submetida ao grupo de trabalho MAVLink no GitHub —
+  Issue #2527 e PR #2528 abertos em 2026-06-16.
 - [ ] Submissão para conferência: USENIX WOOT, IEEE S&P Workshop, ou
   ICRA Workshop on Security.
 - [ ] Contato técnico com ArduPilot core team, PX4 Autopilot security
