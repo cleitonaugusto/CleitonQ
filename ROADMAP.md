@@ -73,7 +73,8 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
   o roadmap de PQC do projeto, com a implementação de referência e os
   números medidos como evidência. Aguardando resposta dos maintainers.
 - [x] Paper técnico: threat model, protocol design, implementation,
-  evaluation, security analysis. Preprint June 2026 (Zenodo/TechRxiv).
+  evaluation, security analysis. Publicado em Zenodo 2026-06-20 —
+  https://doi.org/10.5281/zenodo.20776349
 - [ ] Post em `discuss.ardupilot.org` com link para o paper e a discussão.
 
 **Entrega:** `v0.2.0`

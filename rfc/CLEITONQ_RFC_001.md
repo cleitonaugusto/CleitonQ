@@ -3,7 +3,7 @@
 **Author:** Cleiton Augusto Correa Bezerra  
 **Status:** Draft  
 **Reference implementation:** https://github.com/cleitonaugusto/CleitonQ  
-**Technical paper:** Preprint June 2026 (Zenodo/TechRxiv — DOI pending upload)
+**Technical paper:** https://doi.org/10.5281/zenodo.20776349
 
 ---
 
@@ -262,4 +262,4 @@ Chunking/reassembly is a thin layer on top of these serialized payloads.
 - RustCrypto ml-kem: https://github.com/RustCrypto/KEMs
 - RustCrypto ml-dsa: https://github.com/RustCrypto/signatures
 - CleitonQ reference implementation: https://github.com/cleitonaugusto/CleitonQ
-- CleitonQ technical paper: Preprint June 2026 (DOI pending Zenodo upload)
+- CleitonQ technical paper: https://doi.org/10.5281/zenodo.20776349
