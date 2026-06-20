@@ -123,30 +123,38 @@ abrir diálogo técnico com a comunidade MAVLink sobre PQC.
 
 ---
 
-## Fase 5 — Outros protocolos `[condicional, após Fase 1-4]`
+## Fase 5 — Expansão para outros protocolos `[sequencial]`
 
 A biblioteca `cleitonq` (`kem.rs`, `dsa.rs`, `channel.rs`) é agnóstica de
-protocolo — MAVLink foi o primeiro alvo por contexto (projeto Laminar).
-O mesmo gap de PQC existe em outros protocolos binários usados em sistemas
-com link não confiável e custo alto de breach:
+protocolo — MAVLink foi o primeiro alvo. O achado de relay-transparency é
+uma falha arquitetural presente em qualquer protocolo binário onde middleware
+re-serializa frames. A mesma solução (fragmentação em mensagens nativas do
+protocolo) se aplica a todos os alvos abaixo.
 
-| Vertical | Protocolo |
-|---|---|
-| Robótica | ROS2/DDS |
-| Veicular/automotivo | CAN bus, UAVCAN |
-| Industrial/SCADA | Modbus, OPC-UA |
-| IoT | MQTT, CoAP |
+| Vertical | Protocolo | Status | Desbloqueador |
+|---|---|---|---|
+| Robótica industrial | ROS2/DDS | Issue aberta: ros2/sros2#392 (2026-06-16) | — pode avançar agora |
+| Veicular / drone embedded | CAN bus, DroneCAN/OpenCyphal | Aguardando | `no_std` (Fase 3) |
+| Industrial / SCADA | OPC-UA, IEC 62443 | Aguardando | Resposta MAVLink WG |
+| Satélites / espaço | CCSDS | Longo prazo | Credibilidade estabelecida nos anteriores |
+
+**Relay-transparency em DDS bridges:** a mesma re-serialização silenciosa
+que ocorre no MAVProxy ocorre em `ros1_bridge` e bridges DDS. A issue
+ros2/sros2#392 documenta o problema e questiona o caminho PQC da equipe SROS2.
 
 ---
 
 ## Visão de longo prazo
 
 ```
-2026 Q2  Paper publicado (preprint Zenodo/TechRxiv)
-2026 Q2  Diálogo técnico iniciado — MAVLink issue #2525
-2026 Q2  Python SDK (PyO3) e C FFI concluídos
-2026 Q3  RFC MAVLink formal
+2026 Q2  Paper publicado — Zenodo DOI 10.5281/zenodo.20776349       [✓]
+2026 Q2  MAVLink RFC #2527 + PR #2528 submetidos                    [✓]
+2026 Q2  Issue ros2/sros2#392 — relay-transparency em ROS2/DDS      [✓]
+2026 Q2  Python SDK (PyO3) e C FFI concluídos                       [✓]
+2026 Q3  RFC MAVLink — aguardando resposta WG
+2026 Q3  no_std → desbloqueia CAN/DroneCAN
 2026 Q4  Adoção avaliada por ArduPilot ou PX4
+2027     OPC-UA / SCADA, Satélites/CCSDS
 2027 Q2  v1.0 auditado
 ```
 
