@@ -114,16 +114,22 @@ fn bench_full_handshake(c: &mut Criterion) {
     // Measures the complete session establishment (KEM encap + decap + channel init).
     // This is the one-time cost paid at connection setup.
     c.bench_function("full_session_establishment", |b| {
+        let pid = std::process::id();
+        let dk_path = format!("/tmp/cq_bench_dk_{pid}.bin");
+        let ek_path = format!("/tmp/cq_bench_ek_{pid}.bin");
         let keypair = KemKeyPair::generate();
-        keypair.save("/tmp/cq_bench_dk.bin", "/tmp/cq_bench_ek.bin").unwrap();
+        keypair.save(&dk_path, &ek_path).unwrap();
 
         b.iter(|| {
-            let (ct, sk) = black_box(kem::encapsulate("/tmp/cq_bench_ek.bin").unwrap());
-            let dk = KemKeyPair::load_decapsulation_key("/tmp/cq_bench_dk.bin").unwrap();
+            let (ct, sk) = black_box(kem::encapsulate(&ek_path).unwrap());
+            let dk = KemKeyPair::load_decapsulation_key(&dk_path).unwrap();
             let rk = black_box(kem::decapsulate(&dk, &ct).unwrap());
             let _ = black_box(AuthChannel::new(&rk, ChannelDomain::C2));
             let _ = black_box(AuthChannel::new(&sk, ChannelDomain::C2));
         });
+
+        std::fs::remove_file(&dk_path).ok();
+        std::fs::remove_file(&ek_path).ok();
     });
 }
 

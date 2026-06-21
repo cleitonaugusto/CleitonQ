@@ -7,13 +7,15 @@ def test_dsa_roundtrip():
 
     payload = b"arm drone-alpha nonce=1"
     packet = cleitonq.dsa_sign(sk_seed, payload, nonce=1)
-    recovered = cleitonq.dsa_verify(vk, packet, last_nonce=0)
+    recovered, accepted_nonce = cleitonq.dsa_verify(vk, packet, last_nonce=0)
     assert recovered == payload
+    assert accepted_nonce == 1
 
 def test_dsa_replay_rejected():
     sk_seed, vk = cleitonq.dsa_keygen()
     packet = cleitonq.dsa_sign(sk_seed, b"cmd", nonce=5)
-    cleitonq.dsa_verify(vk, packet, last_nonce=4)
+    _, nonce = cleitonq.dsa_verify(vk, packet, last_nonce=4)
+    assert nonce == 5
     try:
         cleitonq.dsa_verify(vk, packet, last_nonce=5)
         assert False, "replay must raise"
@@ -47,8 +49,9 @@ def test_channel_roundtrip():
     payload = b"altitude=50.0 heading=270.0"
 
     packet = cleitonq.channel_sign(session_key, cleitonq.DOMAIN_TELEMETRY, payload, nonce=1)
-    recovered = cleitonq.channel_verify(session_key, cleitonq.DOMAIN_TELEMETRY, packet, last_nonce=0)
+    recovered, accepted_nonce = cleitonq.channel_verify(session_key, cleitonq.DOMAIN_TELEMETRY, packet, last_nonce=0)
     assert recovered == payload
+    assert accepted_nonce == 1
 
 def test_channel_domain_separation():
     key = bytes([0x42] * 32)
@@ -68,8 +71,9 @@ def test_full_session():
 
     payload = b"waypoint lat=10.0 lon=20.0 alt=100.0"
     packet = cleitonq.channel_sign(session_key, cleitonq.DOMAIN_C2, payload, nonce=1)
-    recovered = cleitonq.channel_verify(session_key_drone, cleitonq.DOMAIN_C2, packet, last_nonce=0)
+    recovered, accepted_nonce = cleitonq.channel_verify(session_key_drone, cleitonq.DOMAIN_C2, packet, last_nonce=0)
     assert recovered == payload
+    assert accepted_nonce == 1
 
 if __name__ == "__main__":
     test_dsa_roundtrip()

@@ -17,16 +17,22 @@ use cleitonq::prelude::*;
 /// not let the attacker establish a shared channel with either party.
 #[test]
 fn mitm_ciphertext_substitution_breaks_session() {
-    let keypair_a = KemKeyPair::generate();
-    keypair_a.save("/tmp/cq_mitm_dk_a.bin", "/tmp/cq_mitm_ek_a.bin").unwrap();
-    let keypair_b = KemKeyPair::generate();
-    keypair_b.save("/tmp/cq_mitm_dk_b.bin", "/tmp/cq_mitm_ek_b.bin").unwrap();
+    let pid = std::process::id();
+    let dk_a_path = format!("/tmp/cq_mitm_dk_a_{pid}.bin");
+    let ek_a_path = format!("/tmp/cq_mitm_ek_a_{pid}.bin");
+    let dk_b_path = format!("/tmp/cq_mitm_dk_b_{pid}.bin");
+    let ek_b_path = format!("/tmp/cq_mitm_ek_b_{pid}.bin");
 
-    let (_ct_a, session_key_gs) = encapsulate("/tmp/cq_mitm_ek_a.bin").unwrap();
-    let (ct_b, _session_key_gs_b) = encapsulate("/tmp/cq_mitm_ek_b.bin").unwrap();
+    let keypair_a = KemKeyPair::generate();
+    keypair_a.save(&dk_a_path, &ek_a_path).unwrap();
+    let keypair_b = KemKeyPair::generate();
+    keypair_b.save(&dk_b_path, &ek_b_path).unwrap();
+
+    let (_ct_a, session_key_gs) = encapsulate(&ek_a_path).unwrap();
+    let (ct_b, _session_key_gs_b) = encapsulate(&ek_b_path).unwrap();
 
     // Attacker forwards drone A the ciphertext meant for drone B's key pair.
-    let dk_a = KemKeyPair::load_decapsulation_key("/tmp/cq_mitm_dk_a.bin").unwrap();
+    let dk_a = KemKeyPair::load_decapsulation_key(&dk_a_path).unwrap();
     let session_key_drone = decapsulate(&dk_a, &ct_b).unwrap();
 
     // Both sides derive *some* key (ML-KEM doesn't error on a foreign
@@ -46,7 +52,7 @@ fn mitm_ciphertext_substitution_breaks_session() {
         "drone must reject packets signed under the wrong session key"
     );
 
-    for p in ["/tmp/cq_mitm_dk_a.bin", "/tmp/cq_mitm_ek_a.bin", "/tmp/cq_mitm_dk_b.bin", "/tmp/cq_mitm_ek_b.bin"] {
+    for p in [&dk_a_path, &ek_a_path, &dk_b_path, &ek_b_path] {
         std::fs::remove_file(p).ok();
     }
 }

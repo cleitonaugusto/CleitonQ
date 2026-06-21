@@ -123,10 +123,8 @@ Raspberry Pi 5); that comparison is still open, see
 | ML-KEM-1024 keygen | 100.2 µs | 77.1 µs | One-time at provisioning |
 | ML-KEM-1024 encapsulate | 95.5 µs | 70.5 µs | One-time per session |
 | ML-KEM-1024 decapsulate | 125.6 µs | 84.3 µs | One-time per session |
-| ML-DSA-87 sign (40B) | 1.23 ms | 962.2 µs | Per signed command |
-| ML-DSA-87 verify (40B) | 121.5 µs | 84.4 µs | Per received command |
-| ML-DSA-87 sign (256B) | 455.3 µs | 509.1 µs | Per signed command (MAVLink-sized) |
-| ML-DSA-87 verify (256B) | 115.9 µs | 85.3 µs | Per received command |
+| ML-DSA-87 sign | 455.3 µs | 509.1 µs | Per signed command — O(1) in payload size |
+| ML-DSA-87 verify | 115.9 µs | 85.3 µs | Per received command — O(1) in payload size |
 | HMAC-SHA3-256 sign | 2.50 µs | 1.10 µs | Per packet at 100 Hz |
 | HMAC-SHA3-256 verify | 2.37 µs | 1.12 µs | Per packet at 100 Hz |
 | Full session establishment | 304.6 µs | 241.1 µs | Encap + decap + channel init |
@@ -147,8 +145,9 @@ ML-DSA-87 is used for high-value commands (waypoints, arm/disarm), not every tel
 ## MAVLink integration
 
 CleitonQ is designed to wrap MAVLink payloads without modifying the MAVLink framing.
-A signed COMMAND_LONG (28 bytes) becomes a 4663-byte authenticated packet — large but
-acceptable for the infrequent high-value commands that justify non-repudiation.
+A signed COMMAND_LONG v2 frame (44 bytes: 10B header + 30B payload + 2B CRC + 2B alignment)
+becomes a 4679-byte authenticated packet — large but acceptable for the infrequent
+high-value commands that justify non-repudiation.
 
 For telemetry streams (100 Hz+), use the HMAC channel with 40 bytes overhead.
 

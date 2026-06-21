@@ -36,13 +36,14 @@ fn dsa_sign(py: Python<'_>, sk_seed: &[u8], payload: &[u8], nonce: u64) -> PyRes
 }
 
 /// Verify a signed packet with ML-DSA-87.
-/// Returns the authenticated payload bytes, or raises ValueError on failure.
+/// Returns (payload: bytes, nonce: int) on success, or raises ValueError on failure.
+/// The returned nonce must be passed as last_nonce in the next call to enforce anti-replay.
 #[pyfunction]
-fn dsa_verify(py: Python<'_>, vk: &[u8], packet: &[u8], last_nonce: u64) -> PyResult<Py<PyBytes>> {
+fn dsa_verify(py: Python<'_>, vk: &[u8], packet: &[u8], last_nonce: u64) -> PyResult<(Py<PyBytes>, u64)> {
     let vk_obj = VerifyingKey::from_bytes(vk)
         .map_err(|e| PyValueError::new_err(format!("invalid verifying key: {e}")))?;
     vk_obj.verify(packet, last_nonce)
-        .map(|(payload, _)| PyBytes::new_bound(py, payload).into())
+        .map(|(payload, nonce)| (PyBytes::new_bound(py, payload).into(), nonce))
         .ok_or_else(|| PyValueError::new_err("signature verification failed or nonce replay"))
 }
 
@@ -94,9 +95,10 @@ fn channel_sign(py: Python<'_>, session_key: &[u8], domain: u8, payload: &[u8], 
 }
 
 /// Verify an HMAC-SHA3-256 authenticated packet.
-/// Returns the authenticated payload bytes, or raises ValueError on failure.
+/// Returns (payload: bytes, nonce: int) on success, or raises ValueError on failure.
+/// The returned nonce must be passed as last_nonce in the next call to enforce anti-replay.
 #[pyfunction]
-fn channel_verify(py: Python<'_>, session_key: &[u8], domain: u8, packet: &[u8], last_nonce: u64) -> PyResult<Py<PyBytes>> {
+fn channel_verify(py: Python<'_>, session_key: &[u8], domain: u8, packet: &[u8], last_nonce: u64) -> PyResult<(Py<PyBytes>, u64)> {
     if session_key.len() != 32 {
         return Err(PyValueError::new_err("session_key must be 32 bytes"));
     }
@@ -104,7 +106,7 @@ fn channel_verify(py: Python<'_>, session_key: &[u8], domain: u8, packet: &[u8],
     key.copy_from_slice(session_key);
     let ch = AuthChannel::new(&key, domain_from_int(domain)?);
     ch.verify(packet, last_nonce)
-        .map(|(payload, _)| PyBytes::new_bound(py, payload).into())
+        .map(|(payload, nonce)| (PyBytes::new_bound(py, payload).into(), nonce))
         .ok_or_else(|| PyValueError::new_err("HMAC verification failed or nonce replay"))
 }
 

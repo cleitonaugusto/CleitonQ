@@ -107,10 +107,10 @@ fn dsa_verify_rejects_oversized_packet_in_bounded_time() {
 
 #[test]
 fn verifying_key_load_rejects_malformed_files_without_panicking() {
-    let path = "/tmp/cq_dos_bad_vk.bin";
+    let path = format!("/tmp/cq_dos_bad_vk_{}.bin", std::process::id());
     for len in [0usize, 1, 100, cleitonq::dsa::VK_BYTES - 1, cleitonq::dsa::VK_BYTES + 1, 10_000] {
-        std::fs::write(path, vec![0x11u8; len]).unwrap();
-        assert!(VerifyingKey::load(path).is_err());
+        std::fs::write(&path, vec![0x11u8; len]).unwrap();
+        assert!(VerifyingKey::load(&path).is_err());
     }
-    std::fs::remove_file(path).ok();
+    std::fs::remove_file(&path).ok();
 }
