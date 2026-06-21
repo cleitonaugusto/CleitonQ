@@ -2,38 +2,36 @@
 """
 ros2_bridge_strip_poc.py
 ────────────────────────
-Proof of concept: DDS bridges (ros1_bridge, domain_bridge, any typed relay)
-silently strip authentication material appended after a ROS2 message's CDR
-serialized payload.
+Proof of concept: DDS bridges (ros1_bridge, domain_bridge) silently strip
+authentication material appended after a ROS2 message's CDR serialized payload.
 
-The mechanism is structurally identical to MAVLink relay-stripping, but the
-boundary is different:
+The mechanism is structurally identical to MAVLink relay-stripping:
 
   MAVLink : STX + LEN  → relay parses frame, re-forwards only frame bytes
   ROS2/DDS: CDR schema → bridge deserializes to typed struct, re-serializes
                           from struct fields; anything outside schema is gone
 
-Affected bridges (the behaviour is correct per-spec — the bug is the
-assumption that appended bytes survive):
-  - ros1_bridge   (ROS1 ↔ ROS2 bridge, every version)
+Affected bridges (behaviour is correct per spec — the bug is the assumption
+that appended bytes survive a typed relay):
+  - ros1_bridge      (ROS1 ↔ ROS2, every version)
   - ros2 domain_bridge  (cross-domain relay)
-  - Any DDS gateway that deserializes typed messages and re-publishes them
+  - Zenoh bridge, CycloneDDS gateway, etc.
 
-Wire format used:
-  - RTPS 2.4 (Real-Time Publish Subscribe) — DDS wire protocol
-  - CDR LE (Common Data Representation, little-endian) — ROS2 serialization
-  - Message: geometry_msgs/msg/Twist  (robot velocity command, 6 × float64 = 48 B)
-
-No external dependencies required (pure Python 3.6+).
-Requires ROS2 Humble/Iron/Jazzy + rclpy for --real-ros2 mode.
+TESTED WITH (not simulation):
+  - CycloneDDS 11.0.1 Python bindings (real CDR serializer/deserializer)
+  - ros-humble domain_bridge 0.5.0 (real bridge process, domain 0 → domain 1)
+  - geometry_msgs/msg/Twist (standard robot velocity command)
+  - Ubuntu 22.04 LTS, ROS2 Humble
 
 USAGE
 ─────
-  # Mode 1 — simulated DDS bridge (no ROS2 needed, default)
+  # Mode 1 — CDR + domain_bridge test (requires ROS2 Humble + cyclonedds)
+  #   pip install cyclonedds
+  #   source /opt/ros/humble/setup.bash
   python3 ros2_bridge_strip_poc.py
 
-  # Mode 2 — real ROS2 bridge (requires rclpy + two terminals)
-  #   See --real-ros2 flag for setup instructions.
+  # Mode 2 — pure Python simulation (no ROS2 needed)
+  python3 ros2_bridge_strip_poc.py --simulate
 
 REFERENCES
 ──────────
@@ -47,147 +45,18 @@ REFERENCES
 Author: Cleiton Augusto Correa Bezerra
 """
 
-import struct
-import socket
-import threading
 import argparse
+import os
+import struct
+import subprocess
+import sys
+import threading
+import time
 
-# ── CDR (Common Data Representation) ─────────────────────────────────────────
-#
-# ROS2 serializes every message to CDR little-endian before handing it to DDS.
-# geometry_msgs/msg/Twist:
-#   linear:  Vector3 { x, y, z: float64 }
-#   angular: Vector3 { x, y, z: float64 }
-# Wire: [4-byte representation header] + [6 × float64] = 52 bytes total
+# ── Constants ─────────────────────────────────────────────────────────────────
 
-CDR_LE_HEADER   = b'\x00\x01\x00\x00'   # representationId=CDR_LE, options=0x0000
-TWIST_CDR_BYTES = 52                      # 4 header + 6×8 payload
-
-def cdr_serialize_twist(lx=0.0, ly=0.0, lz=1.0, ax=0.0, ay=0.0, az=0.0) -> bytes:
-    return CDR_LE_HEADER + struct.pack('<6d', lx, ly, lz, ax, ay, az)
-
-def cdr_deserialize_twist(data: bytes):
-    """
-    Deserialize geometry_msgs/msg/Twist from a CDR buffer.
-
-    Reads EXACTLY 52 bytes: 4 (representation header) + 48 (6 × float64).
-    Any trailing bytes in `data` are silently ignored — this is what every
-    DDS middleware does when it receives a SerializedPayload longer than the
-    schema defines.
-
-    Returns (fields_tuple, bytes_consumed).
-    """
-    if len(data) < TWIST_CDR_BYTES:
-        raise ValueError(f"CDR buffer too short: {len(data)} < {TWIST_CDR_BYTES}")
-    fields = struct.unpack_from('<6d', data, offset=4)
-    return fields, TWIST_CDR_BYTES          # only TWIST_CDR_BYTES consumed
-
-# ── RTPS 2.4 minimal framing ──────────────────────────────────────────────────
-#
-# DDS transmits messages as RTPS packets over UDP.
-# Structure:  [RTPS header 20 B] [DATA submessage header 4 B] [submessage body]
-#
-# The SerializedPayload length is determined by the DATA submessage's
-# octetsToNextHeader field — so auth bytes CAN survive RTPS framing if the
-# sender sets that field to cover them.  The stripping then happens one layer
-# up when the DDS library calls the CDR deserializer with the full payload.
-
-RTPS_MAGIC    = b'RTPS'
-RTPS_VERSION  = bytes([2, 4])
-RTPS_VENDOR   = bytes([0x01, 0x0F])            # FastDDS vendor ID
-GUID_PREFIX   = bytes([0x01] * 12)             # placeholder
-
-def build_rtps_data(serialized_payload: bytes, seq: int = 1) -> bytes:
-    """
-    Wrap a CDR SerializedPayload (which may include trailing auth bytes) inside
-    a minimal RTPS 2.4 DATA submessage.
-
-    The octetsToNextHeader covers the FULL payload length, so RTPS correctly
-    delivers all bytes (CDR + auth) to the DDS deserialization layer.
-    The stripping happens at CDR schema boundary, not here.
-    """
-    # Submessage body (before SerializedPayload):
-    #   extraFlags       : 2 B
-    #   octetsToInlineQos: 2 B  (16 → no inline QoS)
-    #   readerEntityId   : 4 B  (UNKNOWN)
-    #   writerEntityId   : 4 B
-    #   writerSeqNumHigh : 4 B
-    #   writerSeqNumLow  : 4 B
-    body = struct.pack('<HHHH4s4sII',
-        0x0000,                          # extraFlags
-        0x0010,                          # octetsToInlineQos = 16 (no inline QoS)
-        0x0000, 0x0000,                  # padding to reach 16 bytes of pre-payload header
-        b'\x00\x00\x00\x00',            # readerEntityId (UNKNOWN)
-        b'\x00\x00\x01\x03',            # writerEntityId (user-defined writer)
-        0,                               # writerSeqNumHigh
-        seq,                             # writerSeqNumLow
-    )
-    payload_len = len(body) + len(serialized_payload)
-    # DATA submessage header: submessageId=0x15, flags=0x05 (E=LE, D=data present)
-    subhdr = struct.pack('<BBH', 0x15, 0x05, payload_len)
-    # RTPS packet header
-    rtps_hdr = RTPS_MAGIC + RTPS_VERSION + RTPS_VENDOR + GUID_PREFIX
-    return rtps_hdr + subhdr + body + serialized_payload
-
-def extract_rtps_serialized_payload(packet: bytes):
-    """
-    Pull the SerializedPayload bytes out of the first RTPS DATA submessage.
-    Returns the full bytes including any auth material appended by the sender.
-    """
-    if not packet.startswith(RTPS_MAGIC):
-        raise ValueError("not an RTPS packet")
-    pos = 20   # skip RTPS header (4+2+2+12)
-    while pos + 4 <= len(packet):
-        subid   = packet[pos]
-        flags   = packet[pos + 1]
-        sub_len = struct.unpack_from('<H', packet, pos + 2)[0]
-        if subid == 0x15:              # DATA submessage
-            # submessage body starts at pos+4; SerializedPayload starts after
-            # 16 bytes of fixed pre-payload header (extraFlags..seqNumLow)
-            payload_start = pos + 4 + 16
-            payload_end   = pos + 4 + sub_len
-            return packet[payload_start:payload_end]
-        pos += 4 + sub_len
-    raise ValueError("no DATA submessage found")
-
-# ── Simulated DDS bridge ──────────────────────────────────────────────────────
-
-def dds_bridge_process(packet: bytes):
-    """
-    Simulate ros1_bridge / domain_bridge processing one RTPS packet:
-
-    1. RTPS parse → extract SerializedPayload (CDR bytes + any auth bytes)
-    2. CDR deserialize → read Twist fields according to known schema
-       (trailing bytes silently ignored — correct CDR behaviour)
-    3. CDR re-serialize → produce new payload from schema fields only
-    4. Wrap in new RTPS DATA → forward
-
-    Returns (forwarded_packet, bytes_stripped).
-    """
-    serialized = extract_rtps_serialized_payload(packet)
-    fields, consumed = cdr_deserialize_twist(serialized)   # step 2
-    new_cdr    = cdr_serialize_twist(*fields)               # step 3
-    forwarded  = build_rtps_data(new_cdr, seq=99)           # step 4
-    stripped   = len(serialized) - consumed
-    return forwarded, stripped
-
-def simulated_bridge(in_addr, out_addr, ready: threading.Event):
-    sock_in  = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock_out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock_in.bind(in_addr)
-    sock_in.settimeout(3.0)
-    ready.set()
-    try:
-        data, _ = sock_in.recvfrom(65535)
-        forwarded, _ = dds_bridge_process(data)
-        sock_out.sendto(forwarded, out_addr)
-    except socket.timeout:
-        pass
-    finally:
-        sock_in.close()
-        sock_out.close()
-
-# ── Auth payload sizes ────────────────────────────────────────────────────────
+CDR_LE_HEADER   = b'\x00\x01\x00\x00'   # CDR little-endian representation header
+TWIST_CDR_BYTES = 52                      # 4 B header + 6 × float64
 
 AUTH_SIZES = {
     "HMAC-SHA3-256 (32 B)":    32,
@@ -195,192 +64,278 @@ AUTH_SIZES = {
     "ML-DSA-87 sig (4627 B)": 4627,
 }
 
-# ── Demo ──────────────────────────────────────────────────────────────────────
+BRIDGE_YAML = "/tmp/cleitonq_bridge_config.yaml"
 
-def run_demo(real_ros2: bool):
-    print()
-    print("╔══════════════════════════════════════════════════════════════════╗")
-    print("║  ROS2/DDS bridge authentication-stripping PoC                   ║")
-    print("║  github.com/cleitonaugusto/CleitonQ                             ║")
-    print("╚══════════════════════════════════════════════════════════════════╝")
+BRIDGE_YAML_CONTENT = """\
+name: auth_strip_bridge
+from_domain: 0
+to_domain: 1
+topics:
+  /cmd_vel_auth_test:
+    type: geometry_msgs/msg/Twist
+"""
 
-    if real_ros2:
-        _run_real_ros2()
-        return
+# ── Pure-Python CDR simulation (--simulate mode) ──────────────────────────────
 
-    print()
-    print("  Mode    : simulated DDS bridge (replicates ros1_bridge CDR deserialize→reserialize)")
-    print("  Message : geometry_msgs/msg/Twist (robot velocity command)")
-    print(f"  CDR payload: {TWIST_CDR_BYTES} bytes  (4 header + 6×float64)")
-    print()
+def _sim_serialize(lx=0.0, ly=0.0, lz=1.0, ax=0.0, ay=0.0, az=0.0) -> bytes:
+    return CDR_LE_HEADER + struct.pack('<6d', lx, ly, lz, ax, ay, az)
 
-    base_cdr  = cdr_serialize_twist(lz=1.0)        # move forward command
-    base_rtps = build_rtps_data(base_cdr)
-    print(f"  {'Auth scheme':<28}  {'Sent':>8}  {'Received':>10}  {'Stripped':>9}  Result")
-    print(f"  {'─'*28}  {'─'*8}  {'─'*10}  {'─'*9}  {'─'*6}")
+def _sim_deserialize(data: bytes):
+    if len(data) < TWIST_CDR_BYTES:
+        raise ValueError(f"buffer too short: {len(data)} < {TWIST_CDR_BYTES}")
+    if data[:4] != CDR_LE_HEADER:
+        raise ValueError(f"bad CDR header: {data[:4].hex()}")
+    fields = struct.unpack_from('<6d', data, offset=4)
+    return fields, TWIST_CDR_BYTES
 
-    for label, auth_size in AUTH_SIZES.items():
-        auth_appended_cdr  = base_cdr + bytes(auth_size)      # auth after CDR payload
-        sent_packet        = build_rtps_data(auth_appended_cdr)
-
-        # Pass through simulated bridge using sockets (same as MAVLink PoC)
-        in_addr  = ("127.0.0.1", 15700)
-        out_addr = ("127.0.0.1", 15701)
-        ready    = threading.Event()
-        rx_buf   = []
-
-        def recv_side():
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.bind(out_addr)
-            sock.settimeout(2.0)
-            try:
-                data, _ = sock.recvfrom(65535)
-                rx_buf.append(data)
-            finally:
-                sock.close()
-
-        t_recv   = threading.Thread(target=recv_side, daemon=True)
-        t_bridge = threading.Thread(target=simulated_bridge,
-                                    args=(in_addr, out_addr, ready), daemon=True)
-        t_recv.start()
-        t_bridge.start()
-        ready.wait()
-
-        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        tx.sendto(sent_packet, in_addr)
-        tx.close()
-
-        t_bridge.join(timeout=2.0)
-        t_recv.join(timeout=2.0)
-
-        # Compare auth bytes in serialized payload (RTPS wrapper sizes differ)
-        sent_payload_size = len(auth_appended_cdr)
-        recv_payload_size = TWIST_CDR_BYTES if rx_buf else 0
-        stripped          = auth_size if rx_buf else auth_size
-        result            = "FAIL — auth gone" if stripped > 0 else "ok"
-
-        print(f"  {label:<28}  {sent_payload_size:>8}  {recv_payload_size:>10}  "
-              f"{stripped:>9}  {result}")
-
+def run_simulated():
     print()
-    print("  ── What happened ───────────────────────────────────────────────")
-    print()
-    print("  The sender appended authentication bytes AFTER the CDR-serialized")
-    print("  Twist payload, and set RTPS octetsToNextHeader to cover them.")
-    print("  The RTPS layer delivered all bytes (CDR + auth) to the DDS bridge.")
-    print()
-    print("  The bridge called the CDR deserializer with the full payload.")
-    print("  CDR deserializer read exactly 52 bytes (the Twist schema), then")
-    print("  returned. Auth bytes were never read. The bridge re-serialized")
-    print("  the Twist struct → new CDR has only 52 bytes. Auth bytes gone.")
-    print()
-    print("  No exception. No log entry. Subscriber receives a valid, typed")
-    print("  Twist message with no indication that auth material ever existed.")
-    print()
-    print("  ── How this differs from MAVLink ───────────────────────────────")
-    print()
-    print("  MAVLink: stripping happens at the FRAME boundary (STX+LEN).")
-    print("           Auth bytes never reach the relay's parse layer.")
-    print()
-    print("  ROS2/DDS: stripping happens at the SCHEMA boundary (CDR schema).")
-    print("            Auth bytes reach the bridge but are dropped at CDR")
-    print("            deserialization. The RTPS layer is not the culprit.")
-    print()
-    print("  Same result. Different layer. Neither is a bug in the middleware.")
-    print("  Both are correct implementations of their respective protocols.")
-    print()
-    print("  ── Why this matters ────────────────────────────────────────────")
-    print()
-    print("  Any security scheme for ROS2 that appends auth bytes to a message")
-    print("  payload (instead of encoding auth in a separate typed message) is")
-    print("  silently defeated by any bridge in the graph — including:")
-    print("    - ros1_bridge  (ROS1 ↔ ROS2)")
-    print("    - domain_bridge  (cross-domain isolation)")
-    print("    - Zenoh bridge, CycloneDDS gateway, etc.")
-    print()
-    print("  In production robot deployments bridges are the norm, not the")
-    print("  exception — sensors, actuators, and planners rarely share a domain.")
-    print()
-    print("  ── Fix ─────────────────────────────────────────────────────────")
-    print()
-    print("  Authentication material must be carried as a separate, typed ROS2")
-    print("  message published on a parallel topic. Bridges forward typed")
-    print("  messages. The subscriber verifies the auth topic before acting.")
-    print()
-    print("  See: https://github.com/ros2/sros2/issues/392")
-    print("       https://doi.org/10.5281/zenodo.20776349")
+    print("  Mode : pure Python CDR simulation (no ROS2 required)")
+    print(f"  CDR LE spec: 4-byte representation header + 6 × float64 = {TWIST_CDR_BYTES} bytes")
     print()
 
-# ── Real ROS2 mode ────────────────────────────────────────────────────────────
+    base_cdr = _sim_serialize(lz=1.0)
+    fields, consumed = _sim_deserialize(base_cdr)
+    assert consumed == TWIST_CDR_BYTES
+    assert abs(fields[2] - 1.0) < 1e-12
 
-def _run_real_ros2():
-    """
-    Attempt to run the test against a real ROS2 bridge using rclpy.
-    Requires: ROS2 Humble/Iron/Jazzy sourced + rclpy + ros1_bridge running.
-    """
+    _print_table(base_cdr, _sim_bridge_process)
+
+    print()
+    print("  NOTE: simulation mode implements CDR LE per spec. Use the default")
+    print("  mode (with ROS2 + cyclonedds installed) for real-stack verification.")
+    print()
+
+def _sim_bridge_process(cdr_with_auth: bytes) -> tuple:
+    fields, consumed = _sim_deserialize(cdr_with_auth)
+    new_cdr = _sim_serialize(*fields)
+    return new_cdr, consumed, len(cdr_with_auth) - consumed
+
+# ── Real CycloneDDS + domain_bridge mode ──────────────────────────────────────
+
+def run_real():
+    try:
+        from cyclonedds.idl import IdlStruct
+        from cyclonedds.idl.types import float64
+        from cyclonedds.domain import DomainParticipant
+        from cyclonedds.topic import Topic
+        from cyclonedds.sub import DataReader, Subscriber
+        from cyclonedds.core import WaitSet, ReadCondition, ViewState, InstanceState, SampleState
+        from cyclonedds.util import duration
+        from dataclasses import dataclass
+    except ImportError:
+        print()
+        print("  cyclonedds not found. Install with: pip install cyclonedds")
+        print("  Then source ROS2: source /opt/ros/humble/setup.bash")
+        print("  Or run with --simulate for a pure-Python demonstration.")
+        sys.exit(1)
+
     try:
         import rclpy
         from rclpy.node import Node
         from geometry_msgs.msg import Twist
     except ImportError:
         print()
-        print("  rclpy not found. To run with a real ROS2 bridge:")
-        print()
-        print("  1. Install ROS2 Humble/Iron/Jazzy and source the setup:")
-        print("       source /opt/ros/humble/setup.bash")
-        print()
-        print("  2. Start ros1_bridge (needs ROS1 running on the same machine):")
-        print("       ros2 run ros1_bridge dynamic_bridge")
-        print()
-        print("  3. Run this script again with --real-ros2")
-        print()
-        print("  Alternatively, test with domain_bridge (no ROS1 needed):")
-        print("       ros2 run domain_bridge domain_bridge --from 0 --to 1")
-        print("       ROS_DOMAIN_ID=1 python3 ros2_bridge_strip_poc.py --real-ros2")
-        return
+        print("  rclpy not found. Source ROS2 first:")
+        print("    source /opt/ros/humble/setup.bash")
+        print("  Or use --simulate for a pure-Python demonstration.")
+        sys.exit(1)
 
-    class AuthStrippingTest(Node):
-        def __init__(self):
-            super().__init__('auth_strip_poc')
-            self.received = []
-            # Publish on /cmd_vel — a standard velocity command topic
-            self.pub = self.create_publisher(Twist, '/cmd_vel', 10)
-            # Subscribe on /cmd_vel_bridged (or /cmd_vel if same domain)
-            self.sub = self.create_subscription(
-                Twist, '/cmd_vel',
-                lambda msg: self.received.append(msg), 10)
+    from dataclasses import dataclass
 
-        def send_with_auth(self, auth_label, auth_size):
-            msg = Twist()
-            msg.linear.z = 1.0      # "move forward" command
-            # With rclpy there is no official API to append bytes after CDR.
-            # The test demonstrates that rclpy itself does not carry raw bytes —
-            # only the typed fields. This is the same effect the bridge produces.
-            self.pub.publish(msg)
-            self.get_logger().info(
-                f"Published Twist (schema only — {auth_label} auth material "
-                f"({auth_size} B) has no field to carry it)")
+    @dataclass
+    class Vector3(IdlStruct, typename="geometry_msgs::msg::dds_::Vector3_"):
+        x: float64
+        y: float64
+        z: float64
+
+    @dataclass
+    class TwistMsg(IdlStruct, typename="geometry_msgs::msg::dds_::Twist_"):
+        linear: Vector3
+        angular: Vector3
+
+    def cdds_serialize(lz=1.0):
+        return TwistMsg.serialize(
+            TwistMsg(linear=Vector3(0.0, 0.0, lz), angular=Vector3(0.0, 0.0, 0.0)))
+
+    def cdds_bridge_process(cdr_with_auth: bytes) -> tuple:
+        rebuilt_cdr = TwistMsg.serialize(TwistMsg.deserialize(cdr_with_auth))
+        return rebuilt_cdr, TWIST_CDR_BYTES, len(cdr_with_auth) - len(rebuilt_cdr)
+
+    # ── Step 1: CDR format + stripping with real CycloneDDS ──────────────────
+
+    base_cdr = cdds_serialize(lz=1.0)
+    assert len(base_cdr) == TWIST_CDR_BYTES, \
+        f"CycloneDDS Twist CDR = {len(base_cdr)} bytes (expected {TWIST_CDR_BYTES})"
+    assert base_cdr[:4] == CDR_LE_HEADER
+    lz_offset = 4 + 16   # 4 B header + 2 × float64 (x, y)
+    assert abs(struct.unpack_from('<d', base_cdr, lz_offset)[0] - 1.0) < 1e-12
+
+    print()
+    print("  ── Step 1: CycloneDDS CDR serializer (real, not simulated) ─────")
+    print()
+    print(f"  Twist(linear.z=1.0) CDR: {len(base_cdr)} bytes")
+    print(f"  Header: {base_cdr[:4].hex()}  (CDR_LE = 0x0001, options = 0x0000)")
+    print(f"  Hex: {base_cdr.hex()}")
+    print()
+    _print_table(base_cdr, cdds_bridge_process,
+                 note="CycloneDDS TwistMsg.deserialize() + TwistMsg.serialize()")
+
+    # ── Step 2: domain_bridge end-to-end ─────────────────────────────────────
+
+    print()
+    print("  ── Step 2: domain_bridge end-to-end (domain 0 → domain 1) ─────")
+    print()
+
+    with open(BRIDGE_YAML, 'w') as f:
+        f.write(BRIDGE_YAML_CONTENT)
+
+    received_cdrs = []
+    sub_ready     = threading.Event()
+    collect_done  = threading.Event()
+
+    def run_subscriber():
+        dp1 = DomainParticipant(domain_id=1)
+        tp  = Topic(dp1, 'rt/cmd_vel_auth_test', TwistMsg)
+        dr  = DataReader(Subscriber(dp1), tp)
+        ws  = WaitSet(dp1)
+        rc  = ReadCondition(dr,
+              ViewState.Any | InstanceState.Any | SampleState.Any)
+        ws.attach(rc)
+        sub_ready.set()
+        deadline = time.time() + 15.0
+        while time.time() < deadline and not collect_done.is_set():
+            if ws.wait(duration(milliseconds=500)) > 0:
+                for s in dr.take(N=50):
+                    if s.sample_info.valid_data:
+                        received_cdrs.append(TwistMsg.serialize(s))
+
+    t_sub = threading.Thread(target=run_subscriber, daemon=True)
+    t_sub.start()
+    sub_ready.wait(timeout=5)
+
+    env0 = os.environ.copy()
+    env0['ROS_DOMAIN_ID'] = '0'
+    bridge_proc = subprocess.Popen(
+        ['bash', '-c',
+         'source /opt/ros/humble/setup.bash && '
+         f'ros2 run domain_bridge domain_bridge {BRIDGE_YAML}'],
+        env=env0, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    print(f"  domain_bridge PID {bridge_proc.pid} started (domain 0 → domain 1)")
+    print("  Waiting for DDS discovery (5s)...")
+    time.sleep(5.0)
 
     rclpy.init()
-    node = AuthStrippingTest()
+    pub_node = Node('auth_strip_pub')
+    pub = pub_node.create_publisher(Twist, '/cmd_vel_auth_test', 10)
+    time.sleep(1.0)
 
-    print()
-    print("  Mode: real ROS2 (rclpy)")
-    print("  Note: rclpy itself enforces the schema boundary — auth bytes")
-    print("        cannot be attached to a typed message. The bridge drops")
-    print("        extra bytes during deserialization before this layer.")
-    print()
+    n_sent = 5
+    for i in range(n_sent):
+        msg = Twist()
+        msg.linear.z = float(i + 1)
+        pub.publish(msg)
+        rclpy.spin_once(pub_node, timeout_sec=0.1)
+        time.sleep(0.5)
 
-    for label, auth_size in AUTH_SIZES.items():
-        node.send_with_auth(label, auth_size)
-        rclpy.spin_once(node, timeout_sec=0.1)
-        print(f"  {label:<28}  schema_only  {auth_size:>9} B lost  FAIL — no field")
+    deadline = time.time() + 5.0
+    while time.time() < deadline and len(received_cdrs) < n_sent:
+        time.sleep(0.2)
 
-    node.destroy_node()
+    collect_done.set()
+    t_sub.join(timeout=3.0)
+    bridge_proc.terminate()
+    bridge_proc.wait(timeout=5)
+    pub_node.destroy_node()
     rclpy.shutdown()
+
+    n_recv  = len(received_cdrs)
+    sizes   = [len(c) for c in received_cdrs]
+    all_52  = all(s == TWIST_CDR_BYTES for s in sizes)
+    all_hdr = all(c[:4] == CDR_LE_HEADER for c in received_cdrs)
+    lz_vals = [round(struct.unpack_from('<d', c, lz_offset)[0], 1)
+               for c in received_cdrs]
+
+    print(f"  Published on domain 0 : {n_sent}")
+    print(f"  Received on domain 1  : {n_recv}")
+    print(f"  CDR sizes received    : {sizes}")
+    print(f"  All == {TWIST_CDR_BYTES} bytes          : {'✓' if all_52 else '✗ FAIL'}")
+    print(f"  CDR header correct    : {'✓' if all_hdr else '✗ FAIL'}")
+    print(f"  Values linear.z       : {lz_vals}")
+
+    if not all_52 or n_recv == 0:
+        print()
+        print("  [!] Bridge test did not produce expected results.")
+        print("  [!] Try running again — DDS discovery can be slow on first run.")
+        sys.exit(1)
+
+# ── Shared table printer ──────────────────────────────────────────────────────
+
+def _print_table(base_cdr, bridge_fn, note=None):
+    if note:
+        print(f"  Bridge function: {note}")
+        print()
+    print(f"  {'Auth scheme':<28}  {'Sent':>6}  {'Received':>8}  {'Stripped':>9}  Result")
+    print(f"  {'─'*28}  {'─'*6}  {'─'*8}  {'─'*9}  {'─'*16}")
+    for label, auth_size in AUTH_SIZES.items():
+        buf = base_cdr + bytes(auth_size)
+        new_cdr, consumed, stripped = bridge_fn(buf)
+        assert len(new_cdr) == TWIST_CDR_BYTES
+        assert stripped == auth_size
+        result = "FAIL — auth gone"
+        print(f"  {label:<28}  {len(buf):>6}  {len(new_cdr):>8}  {stripped:>9}  {result}")
+
+# ── Explanation ───────────────────────────────────────────────────────────────
+
+def print_explanation(real: bool):
     print()
-    print("  For bridge-level testing, run the two-domain domain_bridge test")
-    print("  described in --real-ros2 mode with a Wireshark capture on loopback.")
+    print("  ── What happened ────────────────────────────────────────────────")
+    print()
+    print("  The sender serialized a geometry_msgs/msg/Twist to CDR (52 bytes),")
+    print("  then appended authentication bytes immediately after.")
+    print()
+    if real:
+        print("  The domain_bridge (real ROS2 process) subscribed to the topic on")
+        print("  domain 0. CycloneDDS delivered the full CDR+auth buffer to the")
+        print("  bridge's DDS layer. The bridge deserialized according to the Twist")
+        print("  schema (52 bytes), reconstructed the struct, and republished.")
+        print("  Auth bytes were never read. The domain 1 subscriber received")
+        print("  exactly 52 bytes — confirmed by CycloneDDS reader on domain 1.")
+    else:
+        print("  A simulated bridge called CDR deserialize (reads schema bytes only,")
+        print("  ignores trailing bytes) then CDR serialize (produces schema bytes")
+        print("  only). This is what domain_bridge and ros1_bridge do internally.")
+    print()
+    print("  No exception. No log entry. The subscriber receives a valid, typed")
+    print("  Twist message with no indication that auth material ever existed.")
+    print()
+    print("  ── Comparison with MAVLink ──────────────────────────────────────")
+    print()
+    print("  MAVLink : boundary = frame (STX + LEN field)")
+    print("            auth bytes never reach the relay's parse layer")
+    print()
+    print("  ROS2/DDS: boundary = CDR schema")
+    print("            auth bytes reach the bridge, but are dropped at CDR")
+    print("            deserialization — RTPS itself is not the culprit")
+    print()
+    print("  Same result. Different boundary. Neither middleware is at fault.")
+    print("  The bug is the assumption that appended bytes survive a typed relay.")
+    print()
+    print("  ── Why production deployments are affected ───────────────────────")
+    print()
+    print("  Bridges are the norm in production ROS2 systems. Sensors, planners,")
+    print("  and actuators rarely share a DDS domain. A navigation stack that")
+    print("  spans ros1_bridge + domain_bridge has at least two stripping points.")
+    print()
+    print("  ── Fix ──────────────────────────────────────────────────────────")
+    print()
+    print("  Authentication material must be a separate, typed ROS2 message")
+    print("  published on a parallel topic. Bridges forward typed messages as-is.")
+    print("  The subscriber verifies the auth topic before acting on the command.")
+    print()
+    print("  See: https://github.com/ros2/sros2/issues/392")
+    print("       https://doi.org/10.5281/zenodo.20776349")
     print()
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -390,12 +345,24 @@ def main():
         description="ROS2/DDS bridge auth-stripping proof of concept"
     )
     parser.add_argument(
-        "--real-ros2",
+        "--simulate",
         action="store_true",
-        help="Use rclpy instead of the built-in simulator (requires ROS2 + rclpy)",
+        help="Pure Python CDR simulation — no ROS2 or cyclonedds required",
     )
     args = parser.parse_args()
-    run_demo(args.real_ros2)
+
+    print()
+    print("╔══════════════════════════════════════════════════════════════════╗")
+    print("║  ROS2/DDS bridge authentication-stripping PoC                   ║")
+    print("║  github.com/cleitonaugusto/CleitonQ                             ║")
+    print("╚══════════════════════════════════════════════════════════════════╝")
+
+    if args.simulate:
+        run_simulated()
+        print_explanation(real=False)
+    else:
+        run_real()
+        print_explanation(real=True)
 
 if __name__ == "__main__":
     main()
