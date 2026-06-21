@@ -1,6 +1,6 @@
 [package]
 name = "cleitonq"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Cleiton Augusto Correa Bezerra <augusto.cleiton@gmail.com>"]
 description = "Post-quantum authenticated command & control for embedded and autonomous systems"
