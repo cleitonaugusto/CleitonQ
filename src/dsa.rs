@@ -288,19 +288,21 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn test_save_load_roundtrip() {
-        let sk = SigningKey::generate();
-        let sk_path = "/tmp/cleitonq_test_sk.bin";
-        let vk_path = "/tmp/cleitonq_test_vk.bin";
-        sk.save(sk_path).unwrap();
-        sk.verifying_key().save(vk_path).unwrap();
+        let pid = std::process::id();
+        let sk_path = format!("/tmp/cleitonq_test_sk_{pid}.bin");
+        let vk_path = format!("/tmp/cleitonq_test_vk_{pid}.bin");
 
-        let sk2 = SigningKey::load(sk_path).unwrap();
-        let vk2 = VerifyingKey::load(vk_path).unwrap();
+        let sk = SigningKey::generate();
+        sk.save(&sk_path).unwrap();
+        sk.verifying_key().save(&vk_path).unwrap();
+
+        let sk2 = SigningKey::load(&sk_path).unwrap();
+        let vk2 = VerifyingKey::load(&vk_path).unwrap();
 
         let packet = sk2.sign(b"hello", 1);
         assert!(vk2.verify(&packet, 0).is_some());
 
-        std::fs::remove_file(sk_path).ok();
-        std::fs::remove_file(vk_path).ok();
+        std::fs::remove_file(&sk_path).ok();
+        std::fs::remove_file(&vk_path).ok();
     }
 }

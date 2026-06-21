@@ -253,19 +253,21 @@ mod tests {
     #[test]
     fn test_keypair_save_load_roundtrip() {
         use std::fs;
-        let keypair = KemKeyPair::generate();
-        let dk_path = "/tmp/cleitonq_test_dk.bin";
-        let ek_path = "/tmp/cleitonq_test_ek.bin";
-        keypair.save(dk_path, ek_path).unwrap();
+        let pid = std::process::id();
+        let dk_path = format!("/tmp/cleitonq_test_dk_{pid}.bin");
+        let ek_path = format!("/tmp/cleitonq_test_ek_{pid}.bin");
 
-        let dk = KemKeyPair::load_decapsulation_key(dk_path).unwrap();
-        let ek = KemKeyPair::load_encapsulation_key(ek_path).unwrap();
+        let keypair = KemKeyPair::generate();
+        keypair.save(&dk_path, &ek_path).unwrap();
+
+        let dk = KemKeyPair::load_decapsulation_key(&dk_path).unwrap();
+        let ek = KemKeyPair::load_encapsulation_key(&ek_path).unwrap();
 
         let (ct, k_gs) = ek.encapsulate();
         let k_drone = dk.try_decapsulate(&ct).unwrap();
         assert_eq!(ss_bytes(&k_gs), ss_bytes(&k_drone));
 
-        fs::remove_file(dk_path).ok();
-        fs::remove_file(ek_path).ok();
+        fs::remove_file(&dk_path).ok();
+        fs::remove_file(&ek_path).ok();
     }
 }
