@@ -13,15 +13,22 @@ keywords = ["post-quantum", "cryptography", "embedded", "mavlink", "security"]
 categories = ["cryptography", "embedded", "network-programming"]
 rust-version = "1.75"
 
+[features]
+default = ["std"]
+# Full std: file I/O, SystemTime, OS-RNG-based key generation.
+std = ["alloc", "ml-kem/getrandom", "ml-dsa/getrandom"]
+# Heap allocation only — no OS services. For RTOS / embedded with allocator.
+alloc = []
+
 [dependencies]
 # Post-quantum cryptography — NIST FIPS 203/204
-ml-kem = { version = "0.3", features = ["getrandom"] }
-ml-dsa = { version = "0.1", features = ["rand_core"] }
-rand_core = { version = "0.6", features = ["getrandom"] }
+ml-kem = { version = "0.3" }
+ml-dsa = { version = "0.1", default-features = false, features = ["alloc", "rand_core"] }
+rand_core = { version = "0.10", default-features = false }
 
 # Symmetric authentication
-hmac = "0.12"
-sha3 = "0.10"
+hmac = { version = "0.12", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 
 # Utility
 zeroize = { version = "1.7", features = ["derive"] }

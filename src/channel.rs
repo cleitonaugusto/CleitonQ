@@ -41,6 +41,7 @@
 //! let (payload, nonce) = rx.verify(&packet, 0).expect("must succeed");
 //! ```
 
+use alloc::vec::Vec;
 use hmac::{Hmac, Mac};
 use sha3::{Digest, Sha3_256};
 use zeroize::Zeroizing;
@@ -145,6 +146,7 @@ impl AuthChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     fn channel_pair(domain: ChannelDomain) -> (AuthChannel, AuthChannel) {
         let key = [0x42u8; 32];

@@ -42,8 +42,9 @@
 //! ([`crate::rotation`] tracks the wire format; a v2 could add a signed
 //! `RevocationNotice` chained from a higher-trust root key).
 
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
 use crate::dsa::{SigningKey, VerifyingKey};
-use std::collections::{HashMap, HashSet};
 
 /// Identifies a signing key across rotations. Must never be reused once
 /// assigned — reusing an ID after revocation would let a registry that
@@ -65,8 +66,17 @@ impl RotatingSigningKey {
     /// Generates a fresh key bound to `id`. The caller is responsible for
     /// ensuring `id` has never been used (and is not currently revoked) in
     /// the target [`KeyRegistry`].
+    #[cfg(feature = "std")]
     pub fn generate(id: KeyId) -> Self {
         Self { id, inner: SigningKey::generate() }
+    }
+
+    /// Generates a fresh key bound to `id` using the provided CSPRNG.
+    pub fn generate_from_rng<R>(id: KeyId, rng: &mut R) -> Self
+    where
+        R: rand_core::CryptoRng,
+    {
+        Self { id, inner: SigningKey::generate_from_rng(rng) }
     }
 
     pub fn id(&self) -> KeyId {
@@ -91,8 +101,8 @@ impl RotatingSigningKey {
 /// The drone-side set of currently-trusted verifying keys, plus revocations.
 #[derive(Default)]
 pub struct KeyRegistry {
-    keys: HashMap<u32, VerifyingKey>,
-    revoked: HashSet<u32>,
+    keys: BTreeMap<u32, VerifyingKey>,
+    revoked: BTreeSet<u32>,
 }
 
 impl KeyRegistry {

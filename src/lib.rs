@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
-
+#![cfg_attr(not(feature = "std"), no_std)]
 //! # CleitonQ
 //!
 //! **Post-quantum authenticated command & control for embedded and autonomous systems.**
@@ -63,6 +63,9 @@
 //! - **Timing-safe verification** — all `verify` operations return `None` on failure
 //!   without revealing which check failed.
 
+#[cfg(any(feature = "alloc", feature = "std"))]
+extern crate alloc;
+
 pub mod channel;
 pub mod dsa;
 pub mod kem;
@@ -74,6 +77,8 @@ pub mod prelude {
     pub use crate::channel::{AuthChannel, ChannelDomain};
     pub use crate::dsa::{SigningKey, VerifyingKey};
     pub use crate::kem;
+    pub use crate::nonce::{SimpleNonce, SimpleNonceTracker};
+    #[cfg(target_has_atomic = "64")]
     pub use crate::nonce::{AtomicNonce, NonceTracker};
     pub use crate::rotation::{KeyId, KeyRegistry, RotatingSigningKey};
 }

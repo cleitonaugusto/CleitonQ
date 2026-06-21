@@ -38,6 +38,8 @@
 //! assert_eq!(nonce, 1);
 //! ```
 
+use alloc::vec::Vec;
+use core::fmt;
 use ml_dsa::{
     EncodedSignature, EncodedVerifyingKey,
     Generate, Keypair, MlDsa87, Signer, Verifier,
@@ -57,16 +59,25 @@ pub struct SigningKey(ml_dsa::SigningKey<MlDsa87>);
 
 impl SigningKey {
     /// Generates a fresh ML-DSA-87 signing key using the OS CSPRNG.
+    #[cfg(feature = "std")]
     pub fn generate() -> Self {
         Self(ml_dsa::SigningKey::<MlDsa87>::generate())
+    }
+
+    /// Generates a fresh ML-DSA-87 signing key using the provided CSPRNG.
+    ///
+    /// Use this on embedded targets that provide their own hardware RNG.
+    pub fn generate_from_rng<R>(rng: &mut R) -> Self
+    where
+        R: rand_core::CryptoRng,
+    {
+        Self(ml_dsa::SigningKey::<MlDsa87>::generate_from_rng(rng))
     }
 
     /// Constructs a signing key from a 32-byte seed (C API / in-memory use).
     pub fn from_seed_bytes(seed: &[u8]) -> Result<Self, Error> {
         let s = ml_dsa::Seed::try_from(seed)
-            .map_err(|_| Error::InvalidKey(format!(
-                "expected {SK_SEED_BYTES} bytes, got {}", seed.len()
-            )))?;
+            .map_err(|_| Error::InvalidKey)?;
         Ok(Self(ml_dsa::SigningKey::<MlDsa87>::from_seed(&s)))
     }
 
@@ -79,16 +90,16 @@ impl SigningKey {
     }
 
     /// Loads a signing key from a 32-byte seed file.
+    #[cfg(feature = "std")]
     pub fn load(path: &str) -> Result<Self, Error> {
         let bytes = std::fs::read(path).map_err(Error::Io)?;
         let seed = ml_dsa::Seed::try_from(bytes.as_slice())
-            .map_err(|_| Error::InvalidKey(format!(
-                "{path}: expected {SK_SEED_BYTES} bytes, got {}", bytes.len()
-            )))?;
+            .map_err(|_| Error::InvalidKey)?;
         Ok(Self(ml_dsa::SigningKey::<MlDsa87>::from_seed(&seed)))
     }
 
     /// Saves the signing key seed to disk.
+    #[cfg(feature = "std")]
     pub fn save(&self, path: &str) -> Result<(), Error> {
         let seed = self.0.to_seed();
         std::fs::write(path, &seed[..]).map_err(Error::Io)
@@ -122,9 +133,7 @@ impl VerifyingKey {
     /// Constructs a verifying key from raw 2592-byte encoding (C API / in-memory use).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let encoded = EncodedVerifyingKey::<MlDsa87>::try_from(bytes)
-            .map_err(|_| Error::InvalidKey(format!(
-                "expected {VK_BYTES} bytes, got {}", bytes.len()
-            )))?;
+            .map_err(|_| Error::InvalidKey)?;
         Ok(Self(ml_dsa::VerifyingKey::<MlDsa87>::decode(&encoded)))
     }
 
@@ -136,16 +145,16 @@ impl VerifyingKey {
     }
 
     /// Loads a verifying key from a 2592-byte file.
+    #[cfg(feature = "std")]
     pub fn load(path: &str) -> Result<Self, Error> {
         let bytes = std::fs::read(path).map_err(Error::Io)?;
         let encoded = EncodedVerifyingKey::<MlDsa87>::try_from(bytes.as_slice())
-            .map_err(|_| Error::InvalidKey(format!(
-                "{path}: expected {VK_BYTES} bytes, got {}", bytes.len()
-            )))?;
+            .map_err(|_| Error::InvalidKey)?;
         Ok(Self(ml_dsa::VerifyingKey::<MlDsa87>::decode(&encoded)))
     }
 
     /// Saves the verifying key to a file.
+    #[cfg(feature = "std")]
     pub fn save(&self, path: &str) -> Result<(), Error> {
         let encoded = self.0.encode();
         let bytes: &[u8] = encoded.as_ref();
@@ -186,19 +195,22 @@ impl VerifyingKey {
 /// Errors from DSA operations.
 #[derive(Debug)]
 pub enum Error {
+    #[cfg(feature = "std")]
     Io(std::io::Error),
-    InvalidKey(String),
+    InvalidKey,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "std")]
             Self::Io(e) => write!(f, "I/O error: {e}"),
-            Self::InvalidKey(s) => write!(f, "invalid key: {s}"),
+            Self::InvalidKey => write!(f, "invalid key"),
         }
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
 #[cfg(test)]
@@ -251,7 +263,7 @@ mod tests {
     #[test]
     fn test_short_packet_rejected() {
         let (_, vk) = keypair();
-        assert!(vk.verify(&vec![0u8; OVERHEAD - 1], 0).is_none());
+        assert!(vk.verify(&alloc::vec![0u8; OVERHEAD - 1], 0).is_none());
         assert!(vk.verify(&[], 0).is_none());
     }
 
@@ -263,6 +275,17 @@ mod tests {
         assert!(vk_other.verify(&packet, 0).is_none());
     }
 
+    #[test]
+    fn test_from_seed_bytes_roundtrip() {
+        let sk = SigningKey::generate();
+        let seed = sk.to_seed_bytes();
+        let sk2 = SigningKey::from_seed_bytes(&seed).unwrap();
+        let vk = sk2.verifying_key();
+        let packet = sk2.sign(b"hello", 1);
+        assert!(vk.verify(&packet, 0).is_some());
+    }
+
+    #[cfg(feature = "std")]
     #[test]
     fn test_save_load_roundtrip() {
         let sk = SigningKey::generate();
