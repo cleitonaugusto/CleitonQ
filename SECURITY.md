@@ -31,7 +31,7 @@ should know before relying on it.
   must size it to fit `dsa::OVERHEAD` (or `channel::OVERHEAD`) plus the
   largest expected payload.
 
-## Known architecture limitation: doesn't survive MAVLink-aware relays
+## Relay-transparency limitation — resolved in CLEITONQ_CHUNK design
 
 Tested against MAVProxy (acting as a UDP-to-UDP relay): a MAVLink v2
 frame with extra trailing bytes appended (standing in for CleitonQ's
@@ -40,22 +40,21 @@ frame with extra trailing bytes appended (standing in for CleitonQ's
 parses discrete MAVLink messages and forwards exactly the recognized
 frame, silently dropping anything appended after it.
 
-This means the current wire format — sign the serialized MAVLink frame,
+This means the naive wire format — sign the serialized MAVLink frame,
 append `nonce + signature` after it — **only works over a direct,
 unrouted link** (point-to-point UDP/serial, no intermediary). It does
 **not** survive any topology with a MAVLink-aware hop in between:
 MAVProxy, `mavlink-router`, QGroundControl acting as a relay, or any GCS
 that re-serializes messages instead of passing raw bytes through.
 
-This is an architecture constraint, not a bug to patch — fixing it
-requires a redesign of the wire format so that the authenticated payload
-is treated as a first-class MAVLink construct rather than opaque trailing
-bytes, allowing relay hops to forward it intact. The proposed wire format
-(`CLEITONQ_SIGNED_CMD`, `CLEITONQ_SESSION_INIT`) is described in the
-technical paper (preprint, June 2026 — https://doi.org/10.5281/zenodo.20776349) and will be the basis
-of a formal MAVLink RFC. Most real deployments route through exactly this
-kind of middleware, so this must be resolved before any standardization
-effort.
+**This limitation is resolved.** The reference implementation (forthcoming
+open-source release, pending formal MAVLink RFC submission) encodes all PQC
+material as first-class MAVLink messages (`CLEITONQ_CHUNK`, msg_id=50000)
+that any relay forwards as valid, opaque-but-intact frames — whether or not
+it knows the CleitonQ dialect. Authentication bytes are never appended
+outside the MAVLink frame boundary. The wire protocol and its relay-
+transparency proof are described in the technical paper
+(https://doi.org/10.5281/zenodo.20776349) and specified in CLEITONQ-RFC-001.
 
 ## Known gaps (not yet resolved)
 
