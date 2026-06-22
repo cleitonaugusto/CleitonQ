@@ -146,7 +146,6 @@ impl AuthChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
 
     fn channel_pair(domain: ChannelDomain) -> (AuthChannel, AuthChannel) {
         let key = [0x42u8; 32];
@@ -202,7 +201,7 @@ mod tests {
     #[test]
     fn test_short_packet_rejected() {
         let (_, rx) = channel_pair(ChannelDomain::C2);
-        assert!(rx.verify(&vec![0u8; OVERHEAD - 1], 0).is_none());
+        assert!(rx.verify(&[0u8; OVERHEAD - 1], 0).is_none());
         assert!(rx.verify(&[], 0).is_none());
     }
 }

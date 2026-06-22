@@ -46,7 +46,7 @@ impl AtomicNonce {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        Self::new(nanos as u64)
+        Self::new(u64::try_from(nanos).unwrap_or(u64::MAX))
     }
 
     /// Atomically returns the next nonce. Safe to call from multiple threads.
@@ -103,7 +103,7 @@ impl SimpleNonce {
         Self(start)
     }
 
-    pub fn next(&mut self) -> u64 {
+    pub fn next_nonce(&mut self) -> u64 {
         let v = self.0;
         self.0 = self.0.wrapping_add(1);
         v
@@ -228,9 +228,9 @@ mod tests {
     #[test]
     fn simple_nonce_strictly_increasing() {
         let mut n = SimpleNonce::new(0);
-        let a = n.next();
-        let b = n.next();
-        let c = n.next();
+        let a = n.next_nonce();
+        let b = n.next_nonce();
+        let c = n.next_nonce();
         assert!(a < b && b < c);
     }
 
