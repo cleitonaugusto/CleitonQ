@@ -1,0 +1,66 @@
+name: Generate Real CleitonQ pcap (ARM64)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/wireshark/**'
+      - 'src/**'
+      - 'cleitonq-python/**'
+      - '.github/workflows/real-pcap.yml'
+  workflow_dispatch:
+
+jobs:
+  gen-real-pcap:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-arm64-real-pcap-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Python bindings (ARM64)
+        working-directory: cleitonq-python
+        run: maturin build --release --out dist/
+
+      - name: Install bindings wheel
+        working-directory: cleitonq-python
+        run: pip install dist/*.whl
+
+      - name: Generate real pcap with live ML-KEM + ML-DSA operations
+        run: |
+          python3 tools/wireshark/gen_real_pcap.py -o cleitonq_real_arm64.pcap
+          echo ""
+          echo "=== pcap summary ==="
+          python3 -c "
+          import struct
+          with open('cleitonq_real_arm64.pcap','rb') as f:
+              f.read(24)
+              count=0
+              while f.read(16):
+                  f.read(struct.unpack('<I',f.read(4))[0] - 4)
+                  count+=1
+          print(f'Total packets: {count}')
+          " || true
+          ls -lh cleitonq_real_arm64.pcap
+
+      - name: Upload pcap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleitonq-real-arm64-pcap
+          path: |
+            cleitonq_real_arm64.pcap
+            tools/wireshark/cleitonq_chunk.lua
+          retention-days: 30
