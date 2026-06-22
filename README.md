@@ -53,7 +53,7 @@ systems using three complementary mechanisms:
 
 ```toml
 [dependencies]
-cleitonq = "0.1"
+cleitonq = "0.2"
 ```
 
 ### Symmetric channel (ML-KEM session + HMAC)
