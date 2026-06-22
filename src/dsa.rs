@@ -45,6 +45,27 @@ use ml_dsa::{
     Generate, Keypair, MlDsa87, Signer, Verifier,
 };
 
+/// Write secret key material to disk with owner-only permissions (0600).
+#[cfg(feature = "std")]
+fn write_secret_file(path: &str, data: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(data)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, data)
+    }
+}
+
 /// Size of an ML-DSA-87 signature in bytes (FIPS 204, Table 1).
 pub const SIG_BYTES: usize = 4627;
 /// Size of the ML-DSA-87 verifying key in bytes.
@@ -98,11 +119,11 @@ impl SigningKey {
         Ok(Self(ml_dsa::SigningKey::<MlDsa87>::from_seed(&seed)))
     }
 
-    /// Saves the signing key seed to disk.
+    /// Saves the signing key seed to disk with owner-only permissions (0600).
     #[cfg(feature = "std")]
     pub fn save(&self, path: &str) -> Result<(), Error> {
         let seed = self.0.to_seed();
-        std::fs::write(path, &seed[..]).map_err(Error::Io)
+        write_secret_file(path, &seed[..]).map_err(Error::Io)
     }
 
     /// Returns the corresponding verifying key (safe to distribute to drones).

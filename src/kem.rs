@@ -52,6 +52,28 @@ use ml_kem::{
 };
 use zeroize::Zeroizing;
 
+/// Write secret key material to disk with owner-only permissions (0600).
+/// Falls back to std::fs::write on non-Unix platforms.
+#[cfg(feature = "std")]
+fn write_secret_file(path: &str, data: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(data)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, data)
+    }
+}
+
 /// Size of the ML-KEM-1024 public encapsulation key in bytes.
 pub const EK_BYTES: usize = 1568;
 /// Size of the decapsulation key seed stored on disk (FIPS 203: d || z, two 32-byte values).
@@ -101,10 +123,13 @@ impl KemKeyPair {
     }
 
     /// Saves the key pair to disk.
+    ///
+    /// The decapsulation key seed is written with mode 0600 (owner read/write only).
+    /// The encapsulation key is public and written with default permissions.
     #[cfg(feature = "std")]
     pub fn save(&self, dk_path: &str, ek_path: &str) -> Result<(), Error> {
         let seed = self.dk.to_seed().ok_or(Error::KeyExport)?;
-        std::fs::write(dk_path, &seed[..]).map_err(Error::Io)?;
+        write_secret_file(dk_path, &seed[..]).map_err(Error::Io)?;
         let ek_bytes = self.ek.to_bytes();
         std::fs::write(ek_path, &ek_bytes[..]).map_err(Error::Io)?;
         Ok(())

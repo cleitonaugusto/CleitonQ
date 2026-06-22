@@ -50,8 +50,20 @@ impl AtomicNonce {
     }
 
     /// Atomically returns the next nonce. Safe to call from multiple threads.
+    ///
+    /// Saturates at `u64::MAX` rather than wrapping — a saturated nonce is
+    /// rejected by the receiver as replay, which is safer than silent rollover.
     pub fn next(&self) -> u64 {
-        self.0.fetch_add(1, Ordering::Relaxed)
+        let mut current = self.0.load(Ordering::Relaxed);
+        loop {
+            if current == u64::MAX {
+                return u64::MAX;
+            }
+            match self.0.compare_exchange(current, current + 1, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return current,
+                Err(observed) => current = observed,
+            }
+        }
     }
 }
 
