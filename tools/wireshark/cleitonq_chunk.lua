@@ -22,7 +22,7 @@
 
 -- ── Protocol definition ───────────────────────────────────────────────────────
 
-local p = Proto("cleitonq_chunk", "CleitonQ CHUNK (PQC Auth Fragment)")
+local p = Proto("cleitonq", "CleitonQ CHUNK (PQC Auth Fragment)")
 
 -- ── Field definitions (wire order: uint16 first, then uint8s, then array) ────
 
