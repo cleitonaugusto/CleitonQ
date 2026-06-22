@@ -305,4 +305,60 @@ mod tests {
         std::fs::remove_file(&sk_path).ok();
         std::fs::remove_file(&vk_path).ok();
     }
+
+    // ── NIST API-layer determinism tests ──────────────────────────────────
+    //
+    // The underlying ml-dsa crate is tested against the official NIST FIPS 204
+    // Known Answer Tests (KATs) in its own CI. These tests verify that our API
+    // layer (seed round-trip, nonce enforcement, wire format) does not corrupt
+    // the cryptographic operations.
+
+    #[test]
+    fn keygen_from_seed_is_deterministic() {
+        let seed = [0x42u8; SK_SEED_BYTES];
+        let sk1 = SigningKey::from_seed_bytes(&seed).unwrap();
+        let sk2 = SigningKey::from_seed_bytes(&seed).unwrap();
+        assert_eq!(sk1.verifying_key().to_bytes(), sk2.verifying_key().to_bytes());
+    }
+
+    #[test]
+    fn known_vk_prefix_for_fixed_seed() {
+        // Fixed seed → deterministic verifying key. Verifies our from_seed_bytes
+        // wrapper does not permute or truncate bytes before passing to ml-dsa.
+        let seed = [0x42u8; SK_SEED_BYTES];
+        let sk = SigningKey::from_seed_bytes(&seed).unwrap();
+        let vk = sk.verifying_key().to_bytes();
+        // First 16 bytes of vk for seed=[0x42;32] — regenerate with gen_kat if ml-dsa is updated.
+        let expected_prefix = [
+            0x8a, 0x9d, 0x3f, 0x21, 0xd2, 0xe9, 0xcb, 0xbd,
+            0xc7, 0x5e, 0xf8, 0xf9, 0x3f, 0xbd, 0x6f, 0xf4,
+        ];
+        assert_eq!(&vk[..16], &expected_prefix);
+        assert_eq!(vk.len(), VK_BYTES);
+    }
+
+    #[test]
+    fn sign_verify_nonce_strictly_enforced() {
+        let seed = [0x11u8; SK_SEED_BYTES];
+        let sk = SigningKey::from_seed_bytes(&seed).unwrap();
+        let vk = sk.verifying_key();
+        let payload = b"waypoint lat=10.0 lon=20.0 alt=100.0";
+
+        let p1 = sk.sign(payload, 1);
+        let p5 = sk.sign(payload, 5);
+
+        assert!(vk.verify(&p1, 0).is_some());
+        assert!(vk.verify(&p5, 1).is_some());
+        assert!(vk.verify(&p1, 1).is_none());
+        assert!(vk.verify(&p5, 5).is_none());
+    }
+
+    #[test]
+    fn wire_format_length_is_predictable() {
+        let seed = [0x22u8; SK_SEED_BYTES];
+        let sk = SigningKey::from_seed_bytes(&seed).unwrap();
+        let payload = b"arm drone-alpha";
+        let packet = sk.sign(payload, 1);
+        assert_eq!(packet.len(), payload.len() + 8 + SIG_BYTES);
+    }
 }
