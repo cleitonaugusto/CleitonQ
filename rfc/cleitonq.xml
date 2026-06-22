@@ -4,8 +4,8 @@
   Author: Cleiton Augusto Correa Bezerra
 
   Defines two message types for relay-transparent post-quantum authentication
-  over MAVLink v2. Message IDs are in the vendor extension range (50000+) and
-  are pending assignment by the MAVLink working group.
+  over MAVLink v2. Message IDs are in the user-defined dialect range and
+  are pending formal assignment by the MAVLink working group.
 
   Wire format rationale:
     MAVLink v2 payloads are capped at 255 bytes. CleitonQ authentication
@@ -17,12 +17,11 @@
     valid MAVLink frame — no auth bytes are silently stripped (unlike the
     naive append-after-frame approach).
 
-  Message IDs (vendor extension range, pending WG assignment):
+  Message IDs (user-defined dialect range, pending WG assignment):
     50000 — CLEITONQ_CHUNK
 -->
 <mavlink>
   <version>3</version>
-  <dialect>0</dialect>
 
   <enums>
     <enum name="CLEITONQ_FRAME_TYPE">
@@ -81,15 +80,15 @@
             (session_token, frame_type) and chunk_seq in [0, chunk_count-1]
             are received.
 
-        SIGNED_CMD example (COMMAND_LONG, 40-byte payload):
-          Total bytes: 14 + 40 + 4627 = 4681
-          Chunks needed: ceil(4681 / 245) = 20
+        SIGNED_CMD example (COMMAND_LONG, 30-byte payload):
+          Total bytes: 14 + 30 + 4627 = 4671
+          Chunks needed: ceil(4671 / 245) = 20
 
         SESSION_INIT example:
           Total bytes: 1 + 8 + 1568 = 1577
           Chunks needed: ceil(1577 / 245) = 7
       </description>
-      <field type="uint8_t" name="target_system" instance="true">
+      <field type="uint8_t" name="target_system">
         System ID of the intended recipient (0 for broadcast).
       </field>
       <field type="uint8_t" name="target_component">
