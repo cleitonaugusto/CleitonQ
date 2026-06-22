@@ -106,7 +106,7 @@ function p.dissector(buf, pinfo, tree)
                         st.count, st.total,
                         complete and " [COMPLETE]" or "")
 
-    local ri = subtree:add(F.reassembly, status)
+    local ri = subtree:add(F.reassembly, buf(0, 0), status)
     if complete then
         ri:add_proto_expert_info(ef_complete)
     elseif pktnum > 1 and st.count < st.total then
