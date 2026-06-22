@@ -9,6 +9,8 @@
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 [![FIPS 203](https://img.shields.io/badge/NIST-FIPS%20203%20ML--KEM--1024-blueviolet.svg)]()
 [![FIPS 204](https://img.shields.io/badge/NIST-FIPS%20204%20ML--DSA--87-blueviolet.svg)]()
+[![ARM64 CI](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml/badge.svg)](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20776349.svg)](https://doi.org/10.5281/zenodo.20776349)
 
 ---
 
@@ -123,8 +125,8 @@ Raspberry Pi 5); that comparison is still open, see
 | ML-KEM-1024 keygen | 100.2 µs | 77.1 µs | One-time at provisioning |
 | ML-KEM-1024 encapsulate | 95.5 µs | 70.5 µs | One-time per session |
 | ML-KEM-1024 decapsulate | 125.6 µs | 84.3 µs | One-time per session |
-| ML-DSA-87 sign | 455.3 µs | 509.1 µs | Per signed command — O(1) in payload size |
-| ML-DSA-87 verify | 115.9 µs | 85.3 µs | Per received command — O(1) in payload size |
+| ML-DSA-87 sign (30B payload) | 455.3 µs | 962.0 µs | Per signed command — O(1) in payload size |
+| ML-DSA-87 verify (30B payload) | 115.9 µs | 85.3 µs | Per received command — O(1) in payload size |
 | HMAC-SHA3-256 sign | 2.50 µs | 1.10 µs | Per packet at 100 Hz |
 | HMAC-SHA3-256 verify | 2.37 µs | 1.12 µs | Per packet at 100 Hz |
 | Full session establishment | 304.6 µs | 241.1 µs | Encap + decap + channel init |
@@ -152,6 +154,61 @@ high-value commands that justify non-repudiation.
 For telemetry streams (100 Hz+), use the HMAC channel with 40 bytes overhead.
 
 A formal MAVLink RFC was submitted in June 2026 — see [Issue #2527](https://github.com/mavlink/mavlink/issues/2527) and [PR #2528](https://github.com/mavlink/mavlink/pull/2528). Wire format spec and dialect XML in [rfc/](rfc/).
+
+---
+
+## Technical paper
+
+> Bezerra, C. A. C. (2026). *Post-Quantum Authentication for MAVLink v2: A Relay-Transparent Wire Format Using ML-KEM-1024 and ML-DSA-87*. Zenodo.
+> [https://doi.org/10.5281/zenodo.20776349](https://doi.org/10.5281/zenodo.20776349)
+
+The paper covers the relay-stripping problem, the CLEITONQ_CHUNK wire format design, security properties, and benchmark methodology.
+
+---
+
+## Tools
+
+### Relay-stripping proof of concept
+
+`tools/mavproxy_relay_strip_poc.py` — a zero-dependency Python 3.6+ script that demonstrates
+how MAVLink-aware relays (MAVProxy, mavlink-router, QGC) silently discard authentication bytes
+appended after a MAVLink frame. Includes a built-in relay simulator and optional live MAVProxy mode.
+
+```
+python3 tools/mavproxy_relay_strip_poc.py
+```
+
+### Wireshark dissector
+
+`tools/wireshark/cleitonq_chunk.lua` — Lua dissector for CLEITONQ_CHUNK (msg_id 50000).
+Decodes all fields, tracks chunk reassembly across packets, and marks completed payloads
+with `[COMPLETE]` in the packet list. Install by copying to your Wireshark plugins directory:
+
+- Linux/Mac: `~/.config/wireshark/plugins/`
+- Windows: `%APPDATA%\Wireshark\plugins\`
+
+Then reload plugins: **Analyze → Reload Lua Plugins** (Ctrl+Shift+L).
+
+A demo `.pcap` with two reassembly scenarios can be generated without hardware:
+
+```
+python3 tools/wireshark/gen_cleitonq_pcap.py   # writes cleitonq_demo.pcap
+wireshark cleitonq_demo.pcap
+```
+
+Display filters: `cleitonq`, `cleitonq.frame_type == 0` (SIGNED_CMD), `cleitonq.frame_type == 1` (SESSION_INIT).
+
+---
+
+## Python bindings
+
+PyO3-based bindings are available in `cleitonq-python/`. All three layers (KEM, DSA, HMAC channel)
+are exposed with a Pythonic API. Build with [maturin](https://github.com/PyO3/maturin):
+
+```bash
+cd cleitonq-python && maturin develop
+python3 tests/test_basic.py   # 7 tests
+```
 
 ---
 
