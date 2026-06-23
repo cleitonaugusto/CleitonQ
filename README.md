@@ -167,6 +167,8 @@ The paper covers the relay-stripping problem, the CLEITONQ_CHUNK wire format des
 
 **Blog:** [cleitonaugusto.github.io](https://cleitonaugusto.github.io) — technical posts on design decisions, formal verification, and protocol analysis.
 
+**dev.to:** [Nonce Design for Safety-Critical Systems](https://dev.to/cleiton_augusto_/nonce-design-for-safety-critical-systems-lessons-from-a-post-quantum-mavlink-protocol-2kmc) — atomic nonce patterns for replay-attack resistance in concurrent drone C2 links.
+
 ---
 
 ## Tools
