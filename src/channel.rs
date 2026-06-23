@@ -129,15 +129,16 @@ impl AuthChannel {
         let tag_start   = packet.len() - 32;
         let nonce_start = tag_start - 8;
 
-        let nonce = u64::from_le_bytes(packet[nonce_start..tag_start].try_into().ok()?);
-        if nonce <= last_nonce {
-            return None;
-        }
-
+        // Authenticate before anti-replay check.
         let mut mac = HmacSha3256::new_from_slice(self.key.as_ref())
             .expect("32-byte key is always valid for HMAC");
         mac.update(&packet[..tag_start]);
         mac.verify_slice(&packet[tag_start..]).ok()?;
+
+        let nonce = u64::from_le_bytes(packet[nonce_start..tag_start].try_into().ok()?);
+        if nonce <= last_nonce {
+            return None;
+        }
 
         Some((&packet[..nonce_start], nonce))
     }

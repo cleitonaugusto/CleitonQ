@@ -163,9 +163,9 @@ impl HybridEncapsulator {
     ///
     /// Send the ciphertext to the drone; keep the session key local.
     pub fn encapsulate(&self) -> Result<(Vec<u8>, Zeroizing<[u8; 32]>), HybridError> {
-        let x25519_ss: [u8; 32] = *self.x25519_sk
+        let x25519_ss = Zeroizing::new(*self.x25519_sk
             .diffie_hellman(&self.peer_x25519_pk)
-            .as_bytes();
+            .as_bytes());
 
         let (ct, ml_kem_ss) = crate::kem::encapsulate_raw(&self.peer_ml_kem_ek)
             .map_err(|_| HybridError::Encapsulation)?;
@@ -206,9 +206,9 @@ impl HybridDecapsulator {
 
     /// Decapsulate the ciphertext and recover the hybrid session key.
     pub fn decapsulate(&self, ct: &[u8]) -> Result<Zeroizing<[u8; 32]>, HybridError> {
-        let x25519_ss: [u8; 32] = *self.x25519_sk
+        let x25519_ss = Zeroizing::new(*self.x25519_sk
             .diffie_hellman(&self.peer_x25519_pk)
-            .as_bytes();
+            .as_bytes());
 
         let ml_kem_ss = crate::kem::decapsulate_from_seed(&self.ml_kem_dk_seed, ct)
             .map_err(|_| HybridError::Decapsulation)?;

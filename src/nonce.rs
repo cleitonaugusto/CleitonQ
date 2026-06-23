@@ -117,7 +117,7 @@ impl SimpleNonce {
 
     pub fn next_nonce(&mut self) -> u64 {
         let v = self.0;
-        self.0 = self.0.wrapping_add(1);
+        self.0 = self.0.saturating_add(1);
         v
     }
 }
