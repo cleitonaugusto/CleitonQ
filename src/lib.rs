@@ -71,6 +71,7 @@ pub mod dsa;
 pub mod kem;
 pub mod nonce;
 pub mod rotation;
+pub mod signer;
 
 /// Convenience re-exports for the most common types.
 pub mod prelude {
@@ -81,6 +82,7 @@ pub mod prelude {
     #[cfg(target_has_atomic = "64")]
     pub use crate::nonce::{AtomicNonce, NonceTracker};
     pub use crate::rotation::{KeyId, KeyRegistry, RotatingSigningKey};
+    pub use crate::signer::{InMemorySigner, Signer, SignerError};
 }
 
 /// CleitonQ crate version.
