@@ -1,0 +1,60 @@
+name: RPi5 (Cortex-A76) benchmarks
+
+on:
+  workflow_dispatch: {}
+
+# Requires a self-hosted runner registered on a Raspberry Pi 5.
+#
+# Registration (run once on the RPi5):
+#   mkdir ~/actions-runner && cd ~/actions-runner
+#   curl -O -L https://github.com/actions/runner/releases/download/v2.316.1/actions-runner-linux-arm64-2.316.1.tar.gz
+#   tar xzf actions-runner-linux-arm64-2.316.1.tar.gz
+#   ./config.sh --url https://github.com/cleitonaugusto/CleitonQ --token <PAT>
+#   ./run.sh
+#
+# The runner must be tagged with labels: self-hosted, linux, arm64, rpi5
+
+jobs:
+  rpi5-bench:
+    runs-on: [self-hosted, linux, arm64, rpi5]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (if not cached)
+        run: |
+          if ! command -v cargo &>/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Record RPi5 CPU info
+        run: |
+          uname -m
+          lscpu | tee cpu_info.txt
+          cat /proc/cpuinfo | grep "Model\|Hardware\|Revision" | head -5 | tee -a cpu_info.txt
+          vcgencmd measure_temp 2>/dev/null || true
+
+      - name: Run benchmarks (release profile, all CPUs)
+        run: |
+          export RAYON_NUM_THREADS=$(nproc)
+          cargo bench --bench pqc_bench 2>&1 | tee bench_output.txt
+
+      - name: Write job summary
+        run: |
+          echo "## RPi5 (Cortex-A76) benchmark results" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(Model name|Architecture|CPU\(s\)|Model|Hardware)" cpu_info.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^(ML-KEM|ML-DSA|HMAC|full_session)" bench_output.txt || cat bench_output.txt | tail -40
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Cortex-A76 @ 2.4 GHz (RPi5). Compare with Neoverse-N2 results from arm-bench.yml." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpi5-bench-results
+          path: |
+            bench_output.txt
+            cpu_info.txt
+            target/criterion
