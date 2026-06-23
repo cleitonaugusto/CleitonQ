@@ -11,6 +11,7 @@
 [![FIPS 204](https://img.shields.io/badge/NIST-FIPS%20204%20ML--DSA--87-blueviolet.svg)]()
 [![ARM64 CI](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml/badge.svg)](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20776349.svg)](https://doi.org/10.5281/zenodo.20776349)
+[![Blog](https://img.shields.io/badge/blog-cleitonaugusto.github.io-informational.svg)](https://cleitonaugusto.github.io)
 
 ---
 
@@ -163,6 +164,8 @@ A formal MAVLink RFC was submitted in June 2026 — see [Issue #2527](https://gi
 > [https://doi.org/10.5281/zenodo.20776349](https://doi.org/10.5281/zenodo.20776349)
 
 The paper covers the relay-stripping problem, the CLEITONQ_CHUNK wire format design, security properties, and benchmark methodology.
+
+**Blog:** [cleitonaugusto.github.io](https://cleitonaugusto.github.io) — technical posts on design decisions, formal verification, and protocol analysis.
 
 ---
 
