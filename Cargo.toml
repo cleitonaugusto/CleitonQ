@@ -19,6 +19,9 @@ default = ["std"]
 std = ["alloc", "ml-kem/getrandom", "ml-dsa/getrandom"]
 # Heap allocation only — no OS services. For RTOS / embedded with allocator.
 alloc = []
+# Hybrid classical/PQC key establishment (X25519 + ML-KEM-1024).
+# Enables HybridEncapsulator and HybridDecapsulator. Implies std.
+hybrid = ["std", "dep:x25519-dalek"]
 
 [dependencies]
 # Post-quantum cryptography — NIST FIPS 203/204
@@ -29,6 +32,9 @@ rand_core = { version = "0.10", default-features = false }
 # Symmetric authentication
 hmac = { version = "0.12", default-features = false }
 sha3 = { version = "0.10", default-features = false }
+
+# Classical key exchange (hybrid mode)
+x25519-dalek = { version = "2.0", optional = true, features = ["static_secrets"] }
 
 # Utility
 zeroize = { version = "1.7", features = ["derive"] }

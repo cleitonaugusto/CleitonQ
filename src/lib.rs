@@ -68,6 +68,7 @@ extern crate alloc;
 
 pub mod channel;
 pub mod dsa;
+pub mod hybrid;
 pub mod kem;
 pub mod nonce;
 pub mod rotation;
