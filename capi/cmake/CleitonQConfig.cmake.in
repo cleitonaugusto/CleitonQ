@@ -1,0 +1,43 @@
+@PACKAGE_INIT@
+
+# CleitonQ CMake package configuration
+# Generated for version @PROJECT_VERSION@
+
+include(CMakeFindDependencyMacro)
+
+set_and_check(CLEITONQ_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set_and_check(CLEITONQ_LIB_DIR "@PACKAGE_CMAKE_INSTALL_LIBDIR@")
+
+if(WIN32)
+    set(_CLQ_LIB_NAME "cleitonq_capi.lib")
+else()
+    set(_CLQ_LIB_NAME "libcleitonq_capi.a")
+endif()
+
+set(CLEITONQ_LIBRARIES "${CLEITONQ_LIB_DIR}/${_CLQ_LIB_NAME}")
+
+if(NOT TARGET CleitonQ::capi)
+    add_library(CleitonQ::capi STATIC IMPORTED)
+    set_target_properties(CleitonQ::capi PROPERTIES
+        IMPORTED_LOCATION "${CLEITONQ_LIBRARIES}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CLEITONQ_INCLUDE_DIR}"
+    )
+    if(UNIX AND NOT APPLE)
+        set_target_properties(CleitonQ::capi PROPERTIES
+            INTERFACE_LINK_LIBRARIES "dl;pthread;m"
+        )
+    elseif(APPLE)
+        set_target_properties(CleitonQ::capi PROPERTIES
+            INTERFACE_LINK_LIBRARIES "-framework Security;-framework CoreFoundation"
+        )
+    elseif(WIN32)
+        set_target_properties(CleitonQ::capi PROPERTIES
+            INTERFACE_LINK_LIBRARIES "Bcrypt;ws2_32;Userenv;ntdll"
+        )
+    endif()
+endif()
+
+set(CleitonQ_FOUND TRUE)
+set(CLEITONQ_VERSION "@PROJECT_VERSION@")
+
+check_required_components(CleitonQ)

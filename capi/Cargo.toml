@@ -1,0 +1,15 @@
+[package]
+name = "cleitonq-capi"
+version = "0.2.0"
+edition = "2021"
+authors = ["Cleiton Augusto Correa Bezerra <augusto.cleiton@gmail.com>"]
+description = "C API for CleitonQ — post-quantum authentication for autonomous systems"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cleitonaugusto/CleitonQ"
+
+[lib]
+name = "cleitonq_capi"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+cleitonq = { path = "..", features = ["std"] }
