@@ -59,8 +59,8 @@ jobs:
             --init-token \
             --slot 0 \
             --label "CleitonQ-CI" \
-            --pin cleitonq1234 \
-            --so-pin 00000000
+            --pin "${{ secrets.SOFTHSM_CI_PIN || 'cleitonq-ci-test-pin' }}" \
+            --so-pin "${{ secrets.SOFTHSM_CI_SO_PIN || '00000000' }}"
           echo "Token initialised:"
           softhsm2-util --show-slots
 

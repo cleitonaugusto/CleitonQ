@@ -1,0 +1,46 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly on Monday 06:00 UTC — catches new CVEs against existing deps
+    - cron: '0 6 * * 1'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-audit-${{ hashFiles('Cargo.toml') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --quiet
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Check for unmaintained dependencies
+        run: cargo audit --deny unmaintained
+        continue-on-error: true
