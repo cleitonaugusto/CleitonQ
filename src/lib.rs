@@ -68,6 +68,8 @@ extern crate alloc;
 
 pub mod channel;
 pub mod dsa;
+#[cfg(any(feature = "pkcs11", feature = "tpm2"))]
+pub mod hsm;
 pub mod hybrid;
 pub mod kem;
 pub mod nonce;

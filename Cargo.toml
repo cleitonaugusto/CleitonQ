@@ -22,6 +22,12 @@ alloc = []
 # Hybrid classical/PQC key establishment (X25519 + ML-KEM-1024).
 # Enables HybridEncapsulator and HybridDecapsulator. Implies std.
 hybrid = ["std", "dep:x25519-dalek"]
+# HSM-backed signing via PKCS#11 (SoftHSM2, YubiHSM2, Thales Luna).
+# Enables Pkcs11Signer in cleitonq::hsm. Requires std.
+pkcs11 = ["std", "dep:cryptoki"]
+# TPM2 key storage on embedded (RPi5, Jetson Orin, Cortex-A76).
+# Enables Tpm2Signer in cleitonq::hsm. Requires std + Linux.
+tpm2 = ["std", "dep:tss-esapi"]
 
 [dependencies]
 # Post-quantum cryptography — NIST FIPS 203/204
@@ -35,6 +41,12 @@ sha3 = { version = "0.10", default-features = false }
 
 # Classical key exchange (hybrid mode)
 x25519-dalek = { version = "2.0", optional = true, features = ["static_secrets"] }
+
+# HSM / PKCS#11 backend
+cryptoki = { version = "0.12", optional = true }
+
+# TPM2 backend — only alpha available as of 2026-06; pin to exact version
+tss-esapi = { version = "=8.0.0-alpha.2", optional = true }
 
 # Utility
 zeroize = { version = "1.7", features = ["derive"] }

@@ -1,0 +1,135 @@
+name: PKCS#11 / SoftHSM2 Integration Tests
+
+on:
+  push:
+    paths:
+      - 'src/hsm.rs'
+      - 'src/signer.rs'
+      - 'Cargo.toml'
+      - '.github/workflows/softhsm2.yml'
+  pull_request:
+    paths:
+      - 'src/hsm.rs'
+      - 'src/signer.rs'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  pkcs11-softhsm2:
+    name: PKCS#11 — SoftHSM2 (Ubuntu x86_64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SoftHSM2 and PKCS#11 tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y softhsm2 opensc libsofthsm2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-pkcs11-${{ hashFiles('Cargo.toml') }}
+
+      - name: Configure SoftHSM2
+        run: |
+          mkdir -p /tmp/softhsm2-tokens
+          cat > /tmp/softhsm2.conf << 'EOF'
+          directories.tokendir = /tmp/softhsm2-tokens
+          objectstore.backend = file
+          log.level = DEBUG
+          slots.removable = false
+          EOF
+          echo "SOFTHSM2_CONF=/tmp/softhsm2.conf" >> $GITHUB_ENV
+          echo "SOFTHSM2_LIB=/usr/lib/softhsm/libsofthsm2.so" >> $GITHUB_ENV
+
+      - name: Initialise SoftHSM2 token
+        run: |
+          softhsm2-util \
+            --init-token \
+            --slot 0 \
+            --label "CleitonQ-CI" \
+            --pin cleitonq1234 \
+            --so-pin 00000000
+          echo "Token initialised:"
+          softhsm2-util --show-slots
+
+      - name: Build with pkcs11 feature
+        run: cargo build --features pkcs11
+
+      - name: Run PKCS#11 integration tests
+        run: |
+          cargo test --features pkcs11 -- \
+            --include-ignored \
+            pkcs11_softhsm2 \
+            pkcs11_replay_rejected \
+            2>&1
+        env:
+          SOFTHSM2_CONF: /tmp/softhsm2.conf
+          SOFTHSM2_LIB: /usr/lib/softhsm/libsofthsm2.so
+
+      - name: Verify no key material in environment
+        run: |
+          # Ensure the CI environment does not leak the test PIN
+          env | grep -i "pin\|seed\|secret\|key" && echo "WARNING: sensitive env vars found" || echo "Clean"
+
+  tpm2-swtpm:
+    name: TPM2 — swtpm simulator (Ubuntu x86_64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install swtpm and TPM2 tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y swtpm tpm2-tools libtss2-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-tpm2-${{ hashFiles('Cargo.toml') }}
+
+      - name: Start swtpm simulator
+        run: |
+          mkdir -p /tmp/swtpm-state
+          swtpm socket \
+            --tpmstate dir=/tmp/swtpm-state \
+            --ctrl type=tcp,port=2322 \
+            --server type=tcp,port=2321 \
+            --flags not-need-init \
+            --tpm2 \
+            --daemon
+          sleep 1
+          # Startup the TPM2
+          tpm2_startup -c -T swtpm:port=2321
+          echo "swtpm running on port 2321"
+
+      - name: Build with tpm2 feature
+        run: cargo build --features tpm2
+
+      - name: Run TPM2 integration tests
+        run: |
+          cargo test --features tpm2 -- \
+            --include-ignored \
+            tpm2_swtpm_roundtrip \
+            2>&1
+        env:
+          TPM2TOOLS_TCTI: swtpm:port=2321

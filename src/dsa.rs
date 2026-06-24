@@ -148,6 +148,7 @@ impl SigningKey {
 }
 
 /// ML-DSA-87 verifying key (drone side — public, distribute freely).
+#[derive(Clone)]
 pub struct VerifyingKey(ml_dsa::VerifyingKey<MlDsa87>);
 
 impl VerifyingKey {
