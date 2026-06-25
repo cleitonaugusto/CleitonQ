@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cleitonq_ros2</name>
+  <version>0.2.0</version>
+  <description>
+    Post-quantum authenticated command and control for ROS2 autonomous systems.
+
+    Implements the parallel-topic authentication pattern to defend against
+    relay-transparent authentication stripping (GHSA-f5rj-mrxh-r7vm,
+    draft-bezerra-relay-auth-transparency). Authentication material is
+    published on a separate ROS2 topic so DDS bridges cannot silently
+    discard it during re-serialization.
+
+    Algorithms: ML-KEM-1024 (FIPS 203), ML-DSA-87 (FIPS 204), HMAC-SHA3-256 (FIPS 202).
+  </description>
+  <maintainer email="augusto.cleiton@gmail.com">Cleiton Augusto Correa Bezerra</maintainer>
+  <license>MIT OR Apache-2.0</license>
+  <url type="repository">https://github.com/cleitonaugusto/CleitonQ</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>rosidl_default_generators</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
