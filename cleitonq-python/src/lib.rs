@@ -23,7 +23,7 @@ fn dsa_keygen(py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
     let sk = SigningKey::generate();
     let seed = sk.to_seed_bytes();
     let vk = sk.verifying_key().to_bytes();
-    Ok((PyBytes::new_bound(py, &seed).into(), PyBytes::new_bound(py, &vk).into()))
+    Ok((PyBytes::new(py, &seed).into(), PyBytes::new(py, &vk).into()))
 }
 
 /// Sign a payload with ML-DSA-87.
@@ -32,7 +32,7 @@ fn dsa_keygen(py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
 fn dsa_sign(py: Python<'_>, sk_seed: &[u8], payload: &[u8], nonce: u64) -> PyResult<Py<PyBytes>> {
     let sk = SigningKey::from_seed_bytes(sk_seed)
         .map_err(|e| PyValueError::new_err(format!("invalid signing key: {e}")))?;
-    Ok(PyBytes::new_bound(py, &sk.sign(payload, nonce)).into())
+    Ok(PyBytes::new(py, &sk.sign(payload, nonce)).into())
 }
 
 /// Verify a signed packet with ML-DSA-87.
@@ -43,7 +43,7 @@ fn dsa_verify(py: Python<'_>, vk: &[u8], packet: &[u8], last_nonce: u64) -> PyRe
     let vk_obj = VerifyingKey::from_bytes(vk)
         .map_err(|e| PyValueError::new_err(format!("invalid verifying key: {e}")))?;
     vk_obj.verify(packet, last_nonce)
-        .map(|(payload, nonce)| (PyBytes::new_bound(py, payload).into(), nonce))
+        .map(|(payload, nonce)| (PyBytes::new(py, payload).into(), nonce))
         .ok_or_else(|| PyValueError::new_err("signature verification failed or nonce replay"))
 }
 
@@ -57,7 +57,7 @@ fn kem_keygen(py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
     let dk = kp.dk_seed_bytes()
         .map_err(|e| PyValueError::new_err(format!("keygen failed: {e}")))?;
     let ek = kp.ek_bytes();
-    Ok((PyBytes::new_bound(py, &dk).into(), PyBytes::new_bound(py, &ek).into()))
+    Ok((PyBytes::new(py, &dk).into(), PyBytes::new(py, &ek).into()))
 }
 
 /// Encapsulate a session key using the drone's public encapsulation key.
@@ -66,7 +66,7 @@ fn kem_keygen(py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
 fn kem_encapsulate(py: Python<'_>, ek: &[u8]) -> PyResult<(Py<PyBytes>, Py<PyBytes>)> {
     let (ct, ss) = encapsulate_raw(ek)
         .map_err(|e| PyValueError::new_err(format!("encapsulation failed: {e}")))?;
-    Ok((PyBytes::new_bound(py, &ct).into(), PyBytes::new_bound(py, ss.as_ref()).into()))
+    Ok((PyBytes::new(py, &ct).into(), PyBytes::new(py, ss.as_ref()).into()))
 }
 
 /// Decapsulate and recover the session key.
@@ -75,7 +75,7 @@ fn kem_encapsulate(py: Python<'_>, ek: &[u8]) -> PyResult<(Py<PyBytes>, Py<PyByt
 fn kem_decapsulate(py: Python<'_>, dk_seed: &[u8], ciphertext: &[u8]) -> PyResult<Py<PyBytes>> {
     let ss = decapsulate_from_seed(dk_seed, ciphertext)
         .map_err(|e| PyValueError::new_err(format!("decapsulation failed: {e}")))?;
-    Ok(PyBytes::new_bound(py, ss.as_ref()).into())
+    Ok(PyBytes::new(py, ss.as_ref()).into())
 }
 
 // ── HMAC channel — HMAC-SHA3-256 ─────────────────────────────────────────────
@@ -91,7 +91,7 @@ fn channel_sign(py: Python<'_>, session_key: &[u8], domain: u8, payload: &[u8], 
     let mut key = [0u8; 32];
     key.copy_from_slice(session_key);
     let ch = AuthChannel::new(&key, domain_from_int(domain)?);
-    Ok(PyBytes::new_bound(py, &ch.sign(payload, nonce)).into())
+    Ok(PyBytes::new(py, &ch.sign(payload, nonce)).into())
 }
 
 /// Verify an HMAC-SHA3-256 authenticated packet.
@@ -106,7 +106,7 @@ fn channel_verify(py: Python<'_>, session_key: &[u8], domain: u8, packet: &[u8],
     key.copy_from_slice(session_key);
     let ch = AuthChannel::new(&key, domain_from_int(domain)?);
     ch.verify(packet, last_nonce)
-        .map(|(payload, nonce)| (PyBytes::new_bound(py, payload).into(), nonce))
+        .map(|(payload, nonce)| (PyBytes::new(py, payload).into(), nonce))
         .ok_or_else(|| PyValueError::new_err("HMAC verification failed or nonce replay"))
 }
 
