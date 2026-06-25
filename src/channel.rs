@@ -65,7 +65,7 @@ pub enum ChannelDomain {
 }
 
 impl ChannelDomain {
-    fn salt(self) -> &'static [u8] {
+    pub(crate) fn salt(self) -> &'static [u8] {
         match self {
             Self::C2        => b"cleitonq-c2-v1",
             Self::Telemetry => b"cleitonq-telemetry-v1",

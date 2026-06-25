@@ -74,6 +74,8 @@ pub mod hybrid;
 pub mod kem;
 pub mod nonce;
 pub mod rotation;
+#[cfg(any(feature = "alloc", feature = "std"))]
+pub mod sealed;
 pub mod signer;
 
 /// Convenience re-exports for the most common types.
@@ -85,6 +87,8 @@ pub mod prelude {
     #[cfg(target_has_atomic = "64")]
     pub use crate::nonce::{AtomicNonce, NonceTracker};
     pub use crate::rotation::{KeyId, KeyRegistry, RotatingSigningKey};
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    pub use crate::sealed::{SealedChannel, SEALED_OVERHEAD};
     pub use crate::signer::{InMemorySigner, Signer, SignerError};
 }
 
