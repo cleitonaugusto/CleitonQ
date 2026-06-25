@@ -20,7 +20,7 @@
 //!
 //! ### Symmetric channel (session key from ML-KEM)
 //!
-//! ```no_run
+//! ```rust,no_run,ignore
 //! use cleitonq::prelude::*;
 //!
 //! // Ground station: establish a forward-secret session
@@ -39,7 +39,7 @@
 //!
 //! ### Command signing with non-repudiation (ML-DSA-87)
 //!
-//! ```no_run
+//! ```rust,no_run,ignore
 //! use cleitonq::dsa::{SigningKey, VerifyingKey};
 //!
 //! // Ground station

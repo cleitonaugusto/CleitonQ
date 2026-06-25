@@ -252,6 +252,7 @@ mod tests {
         assert_ne!(k1, k2, "KDF must not be commutative");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_hybrid_mode_display() {
         assert_eq!(HybridMode::PqOnly.to_string(), "pq-only");

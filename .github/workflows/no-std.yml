@@ -1,0 +1,46 @@
+name: no_std build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  no-std-alloc:
+    name: no_std + alloc (x86-64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build (no_std + alloc)
+        run: cargo build --no-default-features --features alloc
+
+      - name: Test (no_std + alloc)
+        run: cargo test --no-default-features --features alloc
+
+  no-std-thumbv7em:
+    name: no_std bare-metal (Cortex-M4F / Pixhawk)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust with Cortex-M target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+
+      - name: Build for Cortex-M4F (no_std + alloc)
+        # On embedded targets an external allocator is provided by the
+        # application (FreeRTOS heap, NuttX malloc, Zephyr sys_heap, etc.).
+        # The library build itself does not require a linked allocator —
+        # only the final binary does. This step verifies that the crate
+        # compiles for Cortex-M4F without OS services.
+        run: >
+          cargo build
+          --target thumbv7em-none-eabihf
+          --no-default-features
+          --features alloc
+          --lib

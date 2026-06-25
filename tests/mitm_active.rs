@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+#![cfg(feature = "std")]
 
 //! Active MITM scenarios: an attacker controlling the link between ground
 //! station and drone tries to substitute, splice, or relay traffic between

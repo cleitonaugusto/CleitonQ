@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Cleiton Augusto Correa Bezerra. Licensed under MIT OR Apache-2.0.
+#![cfg(feature = "std")]
 
 //! Resource-exhaustion checks for both verifiers. A drone's radio link is
 //! attacker-reachable; these tests assert the verifier rejects hostile

@@ -20,7 +20,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```rust,no_run,ignore
 //! use cleitonq::dsa::{SigningKey, VerifyingKey};
 //!
 //! // Key generation (ground station, run once)
@@ -239,12 +239,14 @@ impl std::error::Error for Error {}
 mod tests {
     use super::*;
 
+    #[cfg(feature = "std")]
     fn keypair() -> (SigningKey, VerifyingKey) {
         let sk = SigningKey::generate();
         let vk = sk.verifying_key();
         (sk, vk)
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_sign_verify_roundtrip() {
         let (sk, vk) = keypair();
@@ -256,6 +258,7 @@ mod tests {
         assert_eq!(nonce, 1);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_replay_rejected() {
         let (sk, vk) = keypair();
@@ -265,6 +268,7 @@ mod tests {
         assert!(vk.verify(&packet, 6).is_none(), "nonce 5 < 6: replay");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_tampered_payload_rejected() {
         let (sk, vk) = keypair();
@@ -273,6 +277,7 @@ mod tests {
         assert!(vk.verify(&packet, 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_tampered_signature_rejected() {
         let (sk, vk) = keypair();
@@ -282,6 +287,7 @@ mod tests {
         assert!(vk.verify(&packet, 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_short_packet_rejected() {
         let (_, vk) = keypair();
@@ -289,6 +295,7 @@ mod tests {
         assert!(vk.verify(&[], 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_wrong_key_rejected() {
         let (sk, _) = keypair();
@@ -297,6 +304,7 @@ mod tests {
         assert!(vk_other.verify(&packet, 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_from_seed_bytes_roundtrip() {
         let sk = SigningKey::generate();

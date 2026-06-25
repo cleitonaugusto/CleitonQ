@@ -99,7 +99,10 @@ impl Signer for InMemorySigner {
 mod tests {
     use super::*;
     use crate::dsa::VerifyingKey;
+    #[cfg(not(feature = "std"))]
+    use alloc::boxed::Box;
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_in_memory_signer_roundtrip() {
         let sk = SigningKey::generate();
@@ -123,6 +126,7 @@ mod tests {
         assert!(vk.verify(&packet, 0).is_some());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_signer_replay_rejected() {
         let sk = SigningKey::generate();
@@ -134,6 +138,7 @@ mod tests {
         assert!(vk.verify(&packet, 9).is_some());  // 10 > 9 — accepted
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_signer_trait_object() {
         let sk = SigningKey::generate();

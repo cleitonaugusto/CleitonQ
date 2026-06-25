@@ -56,6 +56,18 @@ criterion = { version = "0.5", features = ["html_reports"] }
 hex = "0.4"
 mavlink = { version = "0.18", default-features = false, features = ["std", "dialect-common"] }
 
+[[example]]
+name = "basic_session"
+required-features = ["std"]
+
+[[example]]
+name = "mavlink_c2"
+required-features = ["std"]
+
+[[example]]
+name = "mavlink_udp_link"
+required-features = ["std"]
+
 [[bench]]
 name = "pqc_bench"
 harness = false

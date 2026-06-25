@@ -16,7 +16,7 @@
 //!
 //! # Example (std)
 //!
-//! ```no_run
+//! ```rust,no_run,ignore
 //! use cleitonq::kem::{KemKeyPair, encapsulate, decapsulate};
 //!
 //! let keypair = KemKeyPair::generate();
@@ -257,6 +257,7 @@ mod tests {
         ss.as_ref().to_vec()
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_encap_decap_shared_secret_matches() {
         let (dk, ek) = MlKem1024::generate_keypair();
@@ -265,6 +266,7 @@ mod tests {
         assert_eq!(ss_bytes(&k_gs), ss_bytes(&k_drone), "shared secrets must match");
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_wrong_ciphertext_produces_different_key() {
         let (dk, ek) = MlKem1024::generate_keypair();

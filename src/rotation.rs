@@ -152,6 +152,7 @@ impl KeyRegistry {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "std")]
     #[test]
     fn rotation_roundtrip() {
         let signer = RotatingSigningKey::generate(KeyId(1));
@@ -165,6 +166,7 @@ mod tests {
         assert_eq!(id, KeyId(1));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn revoked_key_rejected_even_with_valid_signature() {
         let signer = RotatingSigningKey::generate(KeyId(7));
@@ -181,6 +183,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn unknown_key_id_rejected() {
         let signer = RotatingSigningKey::generate(KeyId(99));
@@ -189,6 +192,7 @@ mod tests {
         assert!(registry.verify(&packet, 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn multiple_active_keys_during_rotation_window() {
         let old_signer = RotatingSigningKey::generate(KeyId(1));
@@ -214,6 +218,7 @@ mod tests {
         assert!(registry.verify(&[], 0).is_none());
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn reregistering_revoked_id_does_not_restore_trust() {
         let signer = RotatingSigningKey::generate(KeyId(3));
