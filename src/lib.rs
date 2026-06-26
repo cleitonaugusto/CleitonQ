@@ -68,6 +68,8 @@ extern crate alloc;
 
 pub mod channel;
 pub mod dsa;
+#[cfg(feature = "fips205")]
+pub mod fips205;
 #[cfg(any(feature = "pkcs11", feature = "tpm2"))]
 pub mod hsm;
 pub mod hybrid;
@@ -90,6 +92,8 @@ pub mod prelude {
     #[cfg(any(feature = "alloc", feature = "std"))]
     pub use crate::sealed::{SealedChannel, SEALED_OVERHEAD};
     pub use crate::signer::{InMemorySigner, Signer, SignerError};
+    #[cfg(feature = "fips205")]
+    pub use crate::fips205::{RevocationSigner, RevocationVerifier, SLH_SIG_BYTES, SLH_SK_BYTES, SLH_VK_BYTES};
 }
 
 /// CleitonQ crate version.
