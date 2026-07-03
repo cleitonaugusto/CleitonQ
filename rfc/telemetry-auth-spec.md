@@ -59,7 +59,7 @@ The Telemetry Authentication Protocol (TAP) uses two complementary layers:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Layer 1: Per-packet HMAC-SHA3-256                       │
-│  • Overhead: 40 bytes (8 nonce + 32 tag)                 │
+│  • Overhead: 42 bytes (8 nonce + 2 len + 32 tag)         │
 │  • Latency: 1.1 µs (Neoverse-N2)                        │
 │  • Provides: authenticity + integrity + anti-replay      │
 │  • Does NOT provide: non-repudiation                     │
@@ -68,7 +68,7 @@ The Telemetry Authentication Protocol (TAP) uses two complementary layers:
              ▼ every W packets (default W=256)
 ┌─────────────────────────────────────────────────────────┐
 │  Layer 2: ML-DSA-87 Window Anchor                        │
-│  • Overhead: 4635 bytes (8 nonce + 4627 sig)             │
+│  • Overhead: 4685 bytes (58 header/commitment + 4627 sig)│
 │  • Latency: ~962 µs (Neoverse-N2, amortized = 3.75 µs/pkt) │
 │  • Provides: non-repudiation + audit trail               │
 │  • Signs: SHA3-256 commitment of last W packet MACs      │
@@ -144,7 +144,7 @@ TELEMETRY_ANCHOR packet:
   commitment      : bytes[32]           — SHA3-256(mac_0 || mac_1 || ... || mac_{n-1})
   anchor_signature: bytes[4627]         — ML-DSA-87(ANCHOR_KEY, anchor_nonce || window_start || window_end || packet_count || commitment)
 
-Total size: 4693 bytes
+Total size: 4685 bytes (8 + 8 + 8 + 2 + 32 + 4627)
 ```
 
 **Anchor computation (ground station):**
@@ -173,7 +173,7 @@ At 100 Hz with W=256 (anchor every 2.56 seconds):
 | Component | Per-packet overhead | Effective bandwidth |
 |---|---|---|
 | Layer 1 HMAC | 42 bytes | 33.6 kbps |
-| Layer 2 anchor (amortized) | 4693 / 256 = 18.3 bytes | 14.6 kbps |
+| Layer 2 anchor (amortized) | 4685 / 256 = 18.3 bytes | 14.6 kbps |
 | **Total TAP overhead** | **60.3 bytes** | **48.2 kbps** |
 
 For comparison, a 100-Hz MAVLink telemetry stream with a 100-byte average payload
@@ -193,7 +193,7 @@ For CCSDS Telecommand (TC) frames with uplink budgets of 2–8 kbps:
 
 - W = 1 contact window (all TC packets in one ground station pass)
 - T = contact duration (typically 240–600s for LEO)
-- One anchor per contact window (1 × 4693 bytes = ~37 kbps burst, acceptable)
+- One anchor per contact window (CCSDS_PQC_ANCHOR, 4687 bytes — see adapter spec)
 - Layer 1 HMAC overhead: 42 bytes per TC packet (fits in 1024-byte TC Transfer Frame)
 
 The CCSDS TC authentication extension is specified in [ccsds-pqc-adapter.md](ccsds-pqc-adapter.md).
@@ -243,12 +243,13 @@ The Layer 1 HMAC authentication is implemented in `cleitonq::channel::AuthChanne
 The Layer 2 anchor signature is implemented in `cleitonq::dsa::SigningKey` / `VerifyingKey`.
 
 A reference implementation of the TAP window accumulator and anchor emitter
-is provided in `examples/telemetry_auth.rs`.
+(`examples/telemetry_auth.rs`) is planned — see Open Items.
 
 ---
 
 ## 11. Open Items
 
+- [ ] Reference implementation `examples/telemetry_auth.rs` (window accumulator + anchor emitter)
 - [ ] Define CLEITONQ_TELEMETRY_ANCHOR wire format for MAVLink dialect (MSG_ID TBD)
 - [ ] Specify recovery behavior when anchor is lost in transit
 - [ ] Evaluate W selection heuristics for bandwidth-constrained links
