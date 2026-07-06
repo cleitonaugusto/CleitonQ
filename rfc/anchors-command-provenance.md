@@ -158,8 +158,11 @@ what the signer authenticated at recording time — the operator cannot
 retroactively insert, delete, or modify messages without breaking the chain.
 
 Verification requires no live system, no session secrets, and no trust in
-the party producing the archive. A standalone open-source verifier is
-planned so that any third party can perform this check independently.
+the party producing the archive. A runnable reference emitter and standalone
+verifier — demonstrating intact-archive verification, tamper detection,
+replay rejection, and wrong-signer rejection — is provided in
+`examples/anchor_provenance.rs`, so that any third party can implement and
+perform this check independently.
 
 ---
 
