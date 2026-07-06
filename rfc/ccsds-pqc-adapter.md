@@ -56,6 +56,31 @@ CCSDS Space Data Link Security (SDLS) provides:
 
 SDLS does not provide post-quantum security.
 
+#### 1.2.1 Relationship to SDLS (why this adapter is complementary)
+
+This adapter does not replace SDLS. Three structural properties of SDLS
+(CCSDS 355.0-B-2) define the boundary:
+
+1. **The Security Trailer carries a fixed-length MAC** (§4.1.2.3), sized per
+   Security Association for symmetric tags (16 bytes). An ML-DSA-87 signature
+   (4627 bytes) exceeds an entire 1024-byte TC frame and cannot reside in a
+   Security Trailer. A PQC *signature* service must therefore operate
+   out-of-frame — motivating `CCSDS_PQC_CHUNK` fragmentation (§4).
+2. **SDLS authentication is symmetric** (a MAC, §2.3.2.2), providing integrity
+   and origin authentication to the session peer but not non-repudiation to a
+   third party. The per-contact-window `CCSDS_PQC_ANCHOR` (§3.3) adds exactly
+   that service.
+3. **Over-the-air SA key negotiation is explicitly undefined** in SDLS
+   (§2.3.1.5, "a currently undefined Application Layer function"). The
+   ML-KEM-1024 session establishment of §3.1 is a concrete instantiation of
+   that open function.
+
+SDLS is not relay-strippable: its Security Header and Trailer sit inside the
+Transfer Frame, and the MAC covers the frame header and security header. This
+adapter adds the two services SDLS cannot structurally provide —
+non-repudiation and post-quantum signatures — and fills its undefined key
+establishment function.
+
 ### 1.3 Uplink budget constraints
 
 | Orbit | Typical uplink rate | Contact window | Bytes available/pass |
