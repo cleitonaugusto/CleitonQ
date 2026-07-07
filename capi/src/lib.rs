@@ -59,6 +59,9 @@ pub enum CleitonqDomain {
 /// # Parameters
 /// - `session_key` — pointer to exactly 32 bytes (e.g. from cleitonq_kem_decapsulate).
 /// - `domain`      — CLEITONQ_DOMAIN_C2 (0), TELEMETRY (1), or MESH (2).
+/// # Safety
+/// `session_key` must be null or point to at least 32 readable bytes.
+/// The returned pointer must be freed with `cleitonq_channel_free`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_channel_new(
     session_key: *const u8,
@@ -78,6 +81,9 @@ pub unsafe extern "C" fn cleitonq_channel_new(
 }
 
 /// Frees a channel created by cleitonq_channel_new(). Safe to call with null.
+/// # Safety
+/// `ch` must be null or a pointer returned by `cleitonq_channel_new` that has
+/// not already been freed. After this call the pointer is dangling.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_channel_free(ch: *mut AuthChannel) {
     if !ch.is_null() {
@@ -90,6 +96,10 @@ pub unsafe extern "C" fn cleitonq_channel_free(ch: *mut AuthChannel) {
 /// `out` must point to at least `payload_len + 40` bytes.
 ///
 /// Returns the total packet length (>= 40) on success, or a negative error code.
+/// # Safety
+/// `ch` must be a valid channel pointer. `payload` must point to at least
+/// `payload_len` readable bytes (may be null iff `payload_len == 0`).
+/// `out` must point to at least `out_cap` writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_channel_sign(
     ch: *const AuthChannel,
@@ -103,7 +113,7 @@ pub unsafe extern "C" fn cleitonq_channel_sign(
         return CLEITONQ_ERR_NULL;
     }
     let min_out = payload_len.saturating_add(40);
-    if out_cap < min_out {
+    if out_cap < min_out || min_out > i32::MAX as usize {
         return CLEITONQ_ERR_BUFFER;
     }
     let pl = if payload_len == 0 {
@@ -125,6 +135,10 @@ pub unsafe extern "C" fn cleitonq_channel_sign(
 ///
 /// On failure returns a negative error code. Failure reveals no timing information
 /// about which check failed.
+/// # Safety
+/// `ch` and `packet` must be valid; `packet` must have at least `packet_len`
+/// readable bytes. If non-null, `payload_out` must have `payload_cap` writable
+/// bytes and `nonce_out` must point to a writable `u64`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_channel_verify(
     ch: *const AuthChannel,
@@ -137,6 +151,9 @@ pub unsafe extern "C" fn cleitonq_channel_verify(
 ) -> i32 {
     if ch.is_null() || packet.is_null() {
         return CLEITONQ_ERR_NULL;
+    }
+    if packet_len > i32::MAX as usize {
+        return CLEITONQ_ERR_BUFFER;
     }
     let pkt = slice::from_raw_parts(packet, packet_len);
     match (*ch).verify(pkt, last_nonce) {
@@ -172,6 +189,9 @@ pub extern "C" fn cleitonq_dsa_keygen() -> *mut SigningKey {
 
 /// Reconstructs a signing key from its 32-byte seed.
 /// Returns null on invalid input. Free with cleitonq_dsa_sk_free().
+/// # Safety
+/// `seed` must be null or point to at least 32 readable bytes. The returned
+/// pointer must be freed with `cleitonq_dsa_sk_free`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_sk_from_seed(seed: *const u8) -> *mut SigningKey {
     if seed.is_null() {
@@ -187,6 +207,9 @@ pub unsafe extern "C" fn cleitonq_dsa_sk_from_seed(seed: *const u8) -> *mut Sign
 /// Exports the 32-byte seed of a signing key into `seed_out`.
 /// `seed_out` must point to at least 32 bytes.
 /// Returns CLEITONQ_OK or a negative error code.
+/// # Safety
+/// `sk` must be a valid signing-key pointer; `seed_out` must point to at least
+/// 32 writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_sk_to_seed(
     sk: *const SigningKey,
@@ -202,6 +225,9 @@ pub unsafe extern "C" fn cleitonq_dsa_sk_to_seed(
 
 /// Derives the verifying key from a signing key.
 /// Returns null on allocation failure. Free with cleitonq_dsa_vk_free().
+/// # Safety
+/// `sk` must be a valid signing-key pointer. The returned pointer must be freed
+/// with `cleitonq_dsa_vk_free`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_verifying_key(
     sk: *const SigningKey,
@@ -214,6 +240,9 @@ pub unsafe extern "C" fn cleitonq_dsa_verifying_key(
 
 /// Reconstructs a verifying key from its raw 2592-byte encoding.
 /// Returns null on invalid input. Free with cleitonq_dsa_vk_free().
+/// # Safety
+/// `vk_bytes` must be null or point to at least 2592 readable bytes. The
+/// returned pointer must be freed with `cleitonq_dsa_vk_free`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_vk_from_bytes(
     vk_bytes: *const u8,
@@ -231,6 +260,9 @@ pub unsafe extern "C" fn cleitonq_dsa_vk_from_bytes(
 /// Exports the raw 2592-byte verifying key into `vk_out`.
 /// `vk_out` must point to at least 2592 bytes.
 /// Returns CLEITONQ_OK or a negative error code.
+/// # Safety
+/// `vk` must be a valid verifying-key pointer; `vk_out` must point to at least
+/// 2592 writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_vk_to_bytes(
     vk: *const VerifyingKey,
@@ -245,6 +277,9 @@ pub unsafe extern "C" fn cleitonq_dsa_vk_to_bytes(
 }
 
 /// Frees a signing key. Safe to call with null.
+/// # Safety
+/// `sk` must be null or a pointer from `cleitonq_dsa_keygen` /
+/// `cleitonq_dsa_sk_from_seed` that has not already been freed.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_sk_free(sk: *mut SigningKey) {
     if !sk.is_null() {
@@ -253,6 +288,9 @@ pub unsafe extern "C" fn cleitonq_dsa_sk_free(sk: *mut SigningKey) {
 }
 
 /// Frees a verifying key. Safe to call with null.
+/// # Safety
+/// `vk` must be null or a pointer from `cleitonq_dsa_verifying_key` /
+/// `cleitonq_dsa_vk_from_bytes` that has not already been freed.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_vk_free(vk: *mut VerifyingKey) {
     if !vk.is_null() {
@@ -264,6 +302,10 @@ pub unsafe extern "C" fn cleitonq_dsa_vk_free(vk: *mut VerifyingKey) {
 ///
 /// `out` must point to at least `payload_len + 4635` bytes.
 /// Returns the total packet length on success, or a negative error code.
+/// # Safety
+/// `sk` must be valid. `payload` must point to at least `payload_len` readable
+/// bytes (may be null iff `payload_len == 0`). `out` must point to at least
+/// `out_cap` writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_sign(
     sk: *const SigningKey,
@@ -277,7 +319,7 @@ pub unsafe extern "C" fn cleitonq_dsa_sign(
         return CLEITONQ_ERR_NULL;
     }
     let min_out = payload_len.saturating_add(4635);
-    if out_cap < min_out {
+    if out_cap < min_out || min_out > i32::MAX as usize {
         return CLEITONQ_ERR_BUFFER;
     }
     let pl = if payload_len == 0 {
@@ -294,6 +336,10 @@ pub unsafe extern "C" fn cleitonq_dsa_sign(
 ///
 /// On success copies payload to `payload_out`, writes nonce to `nonce_out`.
 /// Returns payload length (>= 0) on success, negative on failure.
+/// # Safety
+/// `vk` and `packet` must be valid; `packet` must have at least `packet_len`
+/// readable bytes. If non-null, `payload_out` must have `payload_cap` writable
+/// bytes and `nonce_out` must point to a writable `u64`.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_dsa_verify(
     vk: *const VerifyingKey,
@@ -306,6 +352,9 @@ pub unsafe extern "C" fn cleitonq_dsa_verify(
 ) -> i32 {
     if vk.is_null() || packet.is_null() {
         return CLEITONQ_ERR_NULL;
+    }
+    if packet_len > i32::MAX as usize {
+        return CLEITONQ_ERR_BUFFER;
     }
     let pkt = slice::from_raw_parts(packet, packet_len);
     match (*vk).verify(pkt, last_nonce) {
@@ -341,6 +390,9 @@ pub extern "C" fn cleitonq_kem_keygen() -> *mut KemKeyPair {
 }
 
 /// Frees a KEM key pair. Safe to call with null.
+/// # Safety
+/// `kp` must be null or a pointer from `cleitonq_kem_keygen` that has not
+/// already been freed.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_kem_keypair_free(kp: *mut KemKeyPair) {
     if !kp.is_null() {
@@ -350,6 +402,9 @@ pub unsafe extern "C" fn cleitonq_kem_keypair_free(kp: *mut KemKeyPair) {
 
 /// Exports the 1568-byte public encapsulation key into `ek_out`.
 /// Returns CLEITONQ_OK or a negative error code.
+/// # Safety
+/// `kp` must be a valid key-pair pointer; `ek_out` must point to at least
+/// `out_cap` writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_kem_ek_bytes(
     kp: *const KemKeyPair,
@@ -370,6 +425,9 @@ pub unsafe extern "C" fn cleitonq_kem_ek_bytes(
 /// Exports the 64-byte decapsulation key seed into `dk_out`.
 /// Store this securely — it reconstructs the private decapsulation key.
 /// Returns CLEITONQ_OK or a negative error code.
+/// # Safety
+/// `kp` must be a valid key-pair pointer; `dk_out` must point to at least
+/// `out_cap` writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_kem_dk_seed(
     kp: *const KemKeyPair,
@@ -399,6 +457,9 @@ pub unsafe extern "C" fn cleitonq_kem_dk_seed(
 ///
 /// Returns CLEITONQ_OK on success. On success, feed `ss_out` into
 /// cleitonq_channel_new() to create the authenticated channel.
+/// # Safety
+/// `ek_bytes` must point to at least 1568 readable bytes. `ct_out` must point
+/// to at least 1568 writable bytes and `ss_out` to at least 32 writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_kem_encapsulate(
     ek_bytes: *const u8,
@@ -427,6 +488,9 @@ pub unsafe extern "C" fn cleitonq_kem_encapsulate(
 ///
 /// Returns CLEITONQ_OK on success. On success, feed `ss_out` into
 /// cleitonq_channel_new() to create the authenticated channel.
+/// # Safety
+/// `dk_seed` must point to at least 64 readable bytes and `ciphertext` to at
+/// least 1568 readable bytes. `ss_out` must point to at least 32 writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn cleitonq_kem_decapsulate(
     dk_seed: *const u8,
