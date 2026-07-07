@@ -30,6 +30,11 @@ use sha3::{Digest, Sha3_256};
 
 const MAC_BYTES: usize = 32;
 
+/// Domain-separation tag prefixed to every anchor signature input, so an anchor
+/// signature can never be mistaken for a command signature produced by the same
+/// ML-DSA-87 key.
+const ANCHOR_DOMAIN: &[u8] = b"cleitonq-anchor-v1";
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(String::as_str).unwrap_or("");
@@ -121,7 +126,8 @@ fn cmd_emit(f: &HashMap<String, String>) -> Result<(), String> {
     let window_start = parse_u64(f, "window-start")?;
     let window_end = parse_u64(f, "window-end")?;
 
-    let mut payload = meta_bytes(anchor_nonce, window_start, window_end, count);
+    let mut payload = Vec::from(ANCHOR_DOMAIN);
+    payload.extend_from_slice(&meta_bytes(anchor_nonce, window_start, window_end, count));
     payload.extend_from_slice(&commit(&macs)?);
     let anchor = sk.sign(&payload, anchor_nonce);
 
@@ -138,7 +144,12 @@ fn cmd_verify(f: &HashMap<String, String>) -> Result<(), String> {
     let vk = VerifyingKey::load(need(f, "vk")?).map_err(|e| format!("load vk: {e:?}"))?;
     let macs = std::fs::read(need(f, "macs")?).map_err(|e| format!("read macs: {e}"))?;
     let anchor = std::fs::read(need(f, "anchor")?).map_err(|e| format!("read anchor: {e}"))?;
-    let last_nonce = f.get("last-nonce").and_then(|s| s.parse().ok()).unwrap_or(0);
+    // Default to 0, but reject a non-numeric value rather than silently ignoring
+    // it — an auditor must not believe they set a replay floor when they did not.
+    let last_nonce = match f.get("last-nonce") {
+        Some(s) => s.parse().map_err(|_| "--last-nonce must be a number".to_string())?,
+        None => 0,
+    };
 
     match verify(&vk, &anchor, &macs, last_nonce) {
         Ok(n) => {
@@ -155,8 +166,10 @@ fn verify(vk: &VerifyingKey, anchor: &[u8], macs: &[u8], last_nonce: u64) -> Res
     let (payload, anchor_nonce) = vk
         .verify(anchor, last_nonce)
         .ok_or("bad signature, malformed anchor, or replayed anchor nonce")?;
-    if payload.len() < 32 {
-        return Err("anchor payload too short to hold a commitment".into());
+    // Require the anchor domain tag: a command signature (which lacks it) can
+    // never be accepted here, even under the same ML-DSA key.
+    if payload.len() < ANCHOR_DOMAIN.len() + 32 || &payload[..ANCHOR_DOMAIN.len()] != ANCHOR_DOMAIN {
+        return Err("not an anchor: missing domain tag".into());
     }
     let committed = &payload[payload.len() - 32..];
     if committed != commit(macs)? {
@@ -178,7 +191,8 @@ fn cmd_demo() -> Result<(), String> {
         macs.extend_from_slice(&pkt[pkt.len() - MAC_BYTES..]);
     }
 
-    let mut payload = meta_bytes(1, 1, 256, 256);
+    let mut payload = Vec::from(ANCHOR_DOMAIN);
+    payload.extend_from_slice(&meta_bytes(1, 1, 256, 256));
     payload.extend_from_slice(&commit(&macs)?);
     let anchor = sk.sign(&payload, 1);
     println!("anchor: {} bytes over 256 commands\n", anchor.len());

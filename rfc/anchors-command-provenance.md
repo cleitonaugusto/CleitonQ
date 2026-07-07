@@ -84,14 +84,22 @@ to a window of authenticated traffic:
 Given a window of n authenticated messages with MAC tags mac_0 ... mac_{n-1}:
 
   commitment = H(mac_0 || mac_1 || ... || mac_{n-1})
-  anchor     = ( metadata, commitment, Sig_sk(metadata || commitment) )
+  anchor     = ( metadata, commitment,
+                 Sig_sk(DOMAIN || metadata || commitment) )
 
 where:
   H         = SHA3-256 (FIPS 202)
   Sig       = ML-DSA-87 (FIPS 204, NIST security category 5)
+  DOMAIN    = a fixed domain-separation tag (e.g. "cleitonq-anchor-v1")
   metadata  = anchor sequence number, window boundaries, message count
               (exact fields are instantiation-specific)
 ```
+
+The `DOMAIN` prefix is mandatory when the signing key is also used to sign
+other messages (e.g. individual commands): it ensures an anchor signature can
+never be reinterpreted as a valid signature for another message type under the
+same ML-DSA key. A verifier MUST reject any anchor whose signed input does not
+begin with the expected `DOMAIN` tag.
 
 Window closure is governed by two parameters: **W** (maximum messages per
 window) and **T** (maximum time per window); an anchor is emitted at

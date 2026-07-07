@@ -18,6 +18,11 @@ use sha3::{Digest, Sha3_256};
 
 const MAC_BYTES: usize = 32;
 
+/// Domain-separation tag prefixed to every anchor signature input, so an anchor
+/// signature can never be mistaken for a command signature produced by the same
+/// ML-DSA-87 key (which the ground station reuses for both).
+const ANCHOR_DOMAIN: &[u8] = b"cleitonq-anchor-v1";
+
 /// Metadata bound into every anchor signature (little-endian on the wire).
 struct AnchorMeta {
     anchor_nonce: u64,
@@ -27,7 +32,7 @@ struct AnchorMeta {
 }
 
 impl AnchorMeta {
-    /// `anchor_nonce || window_start || window_end || packet_count` (22 bytes LE).
+    /// `anchor_nonce || window_start || window_end || packet_count` (28 bytes LE).
     fn to_bytes(&self) -> Vec<u8> {
         let mut b = Vec::with_capacity(28);
         b.extend_from_slice(&self.anchor_nonce.to_le_bytes());
@@ -52,7 +57,8 @@ fn commit_window(macs: &[[u8; MAC_BYTES]]) -> [u8; 32] {
 /// Returns the wire packet `[ meta || commitment | anchor_nonce_le8 | ml_dsa_sig ]`,
 /// reusing the crate's verified `SigningKey::sign`.
 fn emit_anchor(sk: &SigningKey, meta: &AnchorMeta, macs: &[[u8; MAC_BYTES]]) -> Vec<u8> {
-    let mut signed_payload = meta.to_bytes();
+    let mut signed_payload = Vec::from(ANCHOR_DOMAIN);
+    signed_payload.extend_from_slice(&meta.to_bytes());
     signed_payload.extend_from_slice(&commit_window(macs));
     sk.sign(&signed_payload, meta.anchor_nonce)
 }
@@ -73,11 +79,16 @@ fn verify_anchor(
         .verify(anchor, last_anchor_nonce)
         .ok_or("signature invalid, malformed, or replayed anchor nonce")?;
 
-    // 2. Recompute the commitment from the locally stored MAC sequence and
-    //    check it against the value the signer committed to.
-    if signed_payload.len() < 32 {
-        return Err("anchor payload too short to contain a commitment");
+    // 2. Require the anchor domain tag: a command signature (which lacks it)
+    //    can never be accepted here, even under the same ML-DSA key.
+    if signed_payload.len() < ANCHOR_DOMAIN.len() + 32
+        || &signed_payload[..ANCHOR_DOMAIN.len()] != ANCHOR_DOMAIN
+    {
+        return Err("not an anchor: missing domain tag");
     }
+
+    // 3. Recompute the commitment from the locally stored MAC sequence and
+    //    check it against the value the signer committed to.
     let committed = &signed_payload[signed_payload.len() - 32..];
     let recomputed = commit_window(macs);
     if committed != recomputed {
@@ -149,6 +160,16 @@ fn main() {
     match verify_anchor(&other, &anchor, &macs, 0) {
         Ok(_) => println!("[FAIL] forged-signer anchor accepted!"),
         Err(e) => println!("[PASS] wrong signing key rejected -> {e}"),
+    }
+
+    // --- Case 5: a command-style signature (same key, NO anchor domain tag)
+    //     over the exact meta || commitment bytes must NOT pass as an anchor.
+    let mut command_bytes = meta.to_bytes();
+    command_bytes.extend_from_slice(&commit_window(&macs));
+    let forged = sk.sign(&command_bytes, meta.anchor_nonce); // no ANCHOR_DOMAIN prefix
+    match verify_anchor(&vk, &forged, &macs, 0) {
+        Ok(_) => println!("[FAIL] untagged command signature accepted as anchor!"),
+        Err(e) => println!("[PASS] domain separation holds -> {e}"),
     }
 
     println!("\nAll provenance properties hold: tamper-evidence, non-repudiation,");
