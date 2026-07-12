@@ -347,7 +347,8 @@ mod tests {
     #[test]
     fn seal_large_payload() {
         let (tx, rx) = channel_pair(ChannelDomain::Mesh);
-        let payload = vec![0xABu8; 4096];
+        // Vec::from (not vec!) so the test also builds under no_std + alloc.
+        let payload = Vec::from([0xABu8; 4096]);
         let sealed = tx.seal(&payload, 42);
         assert_eq!(sealed.len(), 4096 + SEALED_OVERHEAD);
         let mut buf = sealed;

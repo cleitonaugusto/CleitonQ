@@ -76,6 +76,14 @@ required-features = ["std"]
 name = "mavlink_udp_link"
 required-features = ["std"]
 
+[[example]]
+name = "anchor_provenance"
+required-features = ["std"]
+
+[[bin]]
+name = "cleitonq-verify"
+required-features = ["std"]
+
 [[bench]]
 name = "pqc_bench"
 harness = false
