@@ -1,0 +1,19 @@
+# cargo-audit configuration.
+#
+# The advisories ignored below are all in DEV/BUILD-only transitive
+# dependencies. They are NOT part of the shipped `cleitonq` library and are
+# never pulled by a downstream user who depends on `cleitonq` — they come in
+# only through dev-dependencies used for examples and benchmarks:
+#
+#   quick-xml  <- mavlink-bindgen <- mavlink   (dev-dependency, examples only)
+#   paste      <- transitive build/dev dependency (crate is unmaintained upstream)
+#
+# Each entry is reviewed; remove an ignore if the crate ever appears in a
+# non-dev dependency path.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0194", # quick-xml quadratic-time DoS — dev-only (mavlink examples)
+    "RUSTSEC-2026-0195", # quick-xml namespace-alloc DoS — dev-only (mavlink examples)
+    "RUSTSEC-2024-0436", # paste unmaintained — dev/build-only transitive dependency
+]

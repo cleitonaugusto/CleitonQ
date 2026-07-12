@@ -61,14 +61,26 @@ fn main() -> ExitCode {
 }
 
 /// Minimal `--key value` flag parser.
+///
+/// A value is the token after a `--key`, but only if that token is not itself
+/// a `--flag`. This prevents a missing value from silently swallowing the next
+/// flag (which would misattribute the resulting error to the wrong flag).
 fn flags(rest: &[String]) -> HashMap<String, String> {
     let mut m = HashMap::new();
     let mut i = 0;
     while i < rest.len() {
         if let Some(key) = rest[i].strip_prefix("--") {
-            let val = rest.get(i + 1).cloned().unwrap_or_default();
+            let val = match rest.get(i + 1) {
+                Some(v) if !v.starts_with("--") => {
+                    i += 2;
+                    v.clone()
+                }
+                _ => {
+                    i += 1;
+                    String::new()
+                }
+            };
             m.insert(key.to_string(), val);
-            i += 2;
         } else {
             i += 1;
         }
