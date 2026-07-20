@@ -1,6 +1,6 @@
 # CleitonQ
 
-**Post-quantum authentication platform for autonomous systems.**
+**Post-quantum authentication for constrained embedded systems, in `no_std` Rust.**
 
 *by Cleiton Augusto Correa Bezerra*
 
@@ -16,7 +16,7 @@
 
 ---
 
-CleitonQ is a post-quantum authentication platform for autonomous systems — drones, ground robots, autonomous vehicles, and spacecraft. It provides FIPS 203/204/205-compliant session establishment, command signing, and high-rate telemetry authentication designed for resource-constrained embedded hardware and CNSA 2.0 compliance requirements.
+CleitonQ is a post-quantum authentication library for resource-constrained embedded systems. It provides FIPS 203/204/205 session establishment, message signing, and high-rate telemetry authentication in `no_std` Rust, targeting the link protocols used in robotics and embedded control.
 
 **Protocol coverage:** MAVLink v2 · ROS2/DDS · CAN · CCSDS Telecommand
 
