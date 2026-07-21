@@ -51,7 +51,6 @@ PoC (no drone required):
 python3 tools/mavproxy_relay_strip_poc.py
 ```
 
-Full advisory: [GHSA-f5rj-mrxh-r7vm](https://github.com/cleitonaugusto/CleitonQ/security/advisories/GHSA-f5rj-mrxh-r7vm)  
 IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)
 
 The same relay-transparency class applies to DDS bridges in ROS2 (CDR boundary stripping), CAN gateways (DLC boundary re-serialization), and CCSDS relay nodes — documented in [Section 4 of the I-D](https://www.ietf.org/archive/id/draft-bezerra-relay-auth-transparency-00.txt).
