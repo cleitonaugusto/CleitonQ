@@ -32,13 +32,13 @@ of up to 1024 bytes, and contact windows of 3–15 minutes for LEO orbits.
 ```
 TC Transfer Frame (CCSDS 232.0-B-4):
   ┌────────────────────────────────────────────────┐
-  │ Primary Header       (6 bytes)                  │
+  │ Primary Header       (5 bytes)                  │
   │   Version Number (2b) | Bypass Flag (1b)         │
   │   Control Command Flag (1b) | Reserved (2b)      │
   │   Spacecraft ID (10b) | Virtual Channel ID (6b)  │
   │   Frame Length (10b) | Frame Seq Number (8b)     │
   ├────────────────────────────────────────────────┤
-  │ TC Segment (variable, up to 1018 bytes)         │
+  │ TC Segment (variable, up to 1019 bytes)         │
   │   Sequence Flags (2b) | Multiplexer Access      │
   │   Point ID (6b) | TC Packet                     │
   ├────────────────────────────────────────────────┤
@@ -85,7 +85,7 @@ establishment function.
 
 | Orbit | Typical uplink rate | Contact window | Bytes available/pass |
 |---|---|---|---|
-| LEO (400–600 km) | 2–8 kbps | 3–12 min | 45 KB – 3.6 MB |
+| LEO (400–600 km) | 2–8 kbps | 3–12 min | 45 KB – 720 KB |
 | MEO (GPS, 20,200 km) | 64 kbps | 4–8 hours | 115 MB |
 | GEO (35,786 km) | 100+ kbps | Continuous | Unlimited |
 | Deep Space | 1–256 bps | Hours–days | KB to MB/pass |
@@ -259,10 +259,10 @@ requirements simultaneously within LEO link budget constraints.
 
 ## 9. References
 
-1. CCSDS 232.0-B-4, *TC Space Data Link Protocol*, June 2010
-2. CCSDS 355.0-B-2, *Space Data Link Security Protocol (SDLS)*, June 2022
+1. CCSDS 232.0-B-4, *TC Space Data Link Protocol*, October 2021
+2. CCSDS 355.0-B-2, *Space Data Link Security Protocol (SDLS)*, July 2022
 3. NIST FIPS 203, *Module-Lattice-Based Key-Encapsulation Mechanism Standard*, August 2024
 4. NIST FIPS 204, *Module-Lattice-Based Digital Signature Standard*, August 2024
 5. NSA, *Commercial National Security Algorithm Suite 2.0*, September 2022
-6. Systematic survey: *Post-quantum cryptography for space systems: Algorithms, implementation, and design constraints*, ScienceDirect 2026
+6. H. Kim, *Post-quantum cryptography for space systems: Algorithms, implementation, and design constraints—A systematic survey*, Acta Astronautica, vol. 246, pp. 863–886, 2026. doi:10.1016/j.actaastro.2026.04.041
 7. CleitonQ IETF I-D: draft-bezerra-relay-auth-transparency-00
