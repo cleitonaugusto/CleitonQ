@@ -47,22 +47,33 @@
 //!
 //! # Cost
 //!
-//! Signing is roughly three to four thousand times slower than ML-DSA-87 — not
-//! the one-to-two orders of magnitude an earlier revision of this note claimed,
-//! which was written when this module used SHA2-128s. Measured on an x86-64
-//! development machine, release build, as an order-of-magnitude guide rather
-//! than a benchmark:
+//! Signing is roughly three to four thousand times slower than ML-DSA-87.
+//! Measured by `benches/pqc_bench.rs` on an x86-64 development machine, release
+//! build, ten samples per figure; reproduce with
+//! `cargo bench --features fips205 --bench pqc_bench -- SLH-DSA`.
 //!
-//! | Operation | ML-DSA-87 | SLH-DSA-SHA2-256s |
-//! |---|---|---|
-//! | Key generation | 0.6 ms | 96 ms |
-//! | Sign | 0.3 ms | 1.14 s |
-//! | Verify | — | 1.6 ms |
+//! | Profile | Key generation | Sign | Verify |
+//! |---|---|---|---|
+//! | SHA2-128s (cat 1) | 103 ms | 772 ms | 796 µs |
+//! | SHA2-192s (cat 3) | 147 ms | 1.35 s | 1.26 ms |
+//! | SHA2-256s (cat 5) | 111 ms | 1.31 s | 1.82 ms |
+//! | *ML-DSA-87, for scale* | *0.6 ms* | *0.3 ms* | — |
 //!
-//! Verification stays cheap, which is what matters: signing happens once, on an
-//! offline machine, and every later check of that signature is milliseconds.
-//! Budget for the signing cost in any ceremony that produces one of these, and
-//! expect a test suite that generates them to be slow.
+//! **Category 3 is a poor trade on this implementation.** Signing at 192s costs
+//! as much as at 256s — the confidence intervals overlap — and its key
+//! generation is measurably slower, while offering less margin. The only reason
+//! to prefer it is signature size, 16 224 bytes against 29 792. The size trade
+//! across profiles is smooth; the time trade is not.
+//!
+//! Verification stays cheap at every profile, which is the property that
+//! matters: signing happens once, on an offline machine, and every later check
+//! of that signature is milliseconds. Budget for the signing cost in any
+//! ceremony that produces one of these, and expect a test suite that generates
+//! them to be slow.
+//!
+//! These are one implementation on one architecture. The ordering between 192s
+//! and 256s in particular may not hold elsewhere, and is worth re-measuring
+//! before it is relied on.
 //!
 //! # Intended use
 //!
@@ -76,9 +87,13 @@
 use alloc::vec::Vec;
 
 use slh_dsa::{
-    ParameterSet, Sha2_128s, Sha2_192s, Sha2_256s,
+    ParameterSet,
     signature::{Keypair as _, Signer as _, Verifier as _},
 };
+
+// The profile types are part of this module's public surface: a caller choosing
+// a profile should not have to depend on the slh-dsa crate to name one.
+pub use slh_dsa::{Sha2_128s, Sha2_192s, Sha2_256s};
 
 /// A revocation profile: a FIPS 205 parameter set together with the sizes it
 /// produces and the NIST category it reaches.

@@ -9,6 +9,8 @@
 //!   cargo bench
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+#[cfg(feature = "fips205")]
+use std::time::Duration;
 use cleitonq::{
     channel::{AuthChannel, ChannelDomain},
     dsa::SigningKey,
@@ -133,5 +135,67 @@ fn bench_full_handshake(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_kem, bench_dsa, bench_channel, bench_full_handshake);
+/// SLH-DSA (FIPS 205) across the three published profiles.
+///
+/// These numbers are quoted in the `fips205` module documentation and in the
+/// CCSDS adapter specification. They live here so the quote is reproducible on
+/// demand and tracked by the benchmark workflows, rather than resting on a
+/// one-off measurement nobody can repeat.
+///
+/// Signing dominates and is slow by construction — the "s" parameter sets trade
+/// signing time for signature size — so the signing groups run few samples.
+/// Verification is cheap, which is the property that matters operationally: the
+/// cost falls on an offline ceremony, and every later check is milliseconds.
+///
+/// Run with: `cargo bench --features fips205 --bench pqc_bench -- SLH-DSA`
+#[cfg(feature = "fips205")]
+fn bench_slh_dsa(c: &mut Criterion) {
+    use cleitonq::fips205::{
+        RevocationProfile, RevocationSigner, Sha2_128s, Sha2_192s, Sha2_256s,
+    };
+
+    const MSG: &[u8] = b"revoke subject=CLQD-4F2A reason=key-compromise";
+
+    fn bench_profile<P: RevocationProfile>(c: &mut Criterion, name: &str) {
+        let mut group = c.benchmark_group(format!("SLH-DSA/{name}"));
+        // Signing a single 256s signature takes on the order of a second, so the
+        // criterion default of 100 samples would put this group in the minutes.
+        group.sample_size(10).measurement_time(Duration::from_secs(20));
+
+        group.bench_function("keygen", |b| {
+            b.iter(|| black_box(RevocationSigner::<P>::generate()));
+        });
+
+        let signer = RevocationSigner::<P>::generate();
+        group.bench_function("sign", |b| {
+            b.iter(|| black_box(signer.sign(black_box(MSG))));
+        });
+
+        let verifier = signer.verifying_key();
+        let sig = signer.sign(MSG);
+        group.bench_function("verify", |b| {
+            b.iter(|| black_box(verifier.verify(black_box(MSG), black_box(&sig))));
+        });
+
+        group.finish();
+    }
+
+    // Ascending security category, so the report reads as the trade it is:
+    // signature size and signing cost against margin.
+    bench_profile::<Sha2_128s>(c, "SHA2-128s-cat1");
+    bench_profile::<Sha2_192s>(c, "SHA2-192s-cat3");
+    bench_profile::<Sha2_256s>(c, "SHA2-256s-cat5");
+}
+
+#[cfg(not(feature = "fips205"))]
+fn bench_slh_dsa(_c: &mut Criterion) {}
+
+criterion_group!(
+    benches,
+    bench_kem,
+    bench_dsa,
+    bench_channel,
+    bench_full_handshake,
+    bench_slh_dsa
+);
 criterion_main!(benches);

@@ -37,7 +37,7 @@ jobs:
       - name: Run benchmarks (release profile, all CPUs)
         run: |
           export RAYON_NUM_THREADS=$(nproc)
-          cargo bench --bench pqc_bench 2>&1 | tee bench_output.txt
+          cargo bench --features fips205 --bench pqc_bench 2>&1 | tee bench_output.txt
 
       - name: Write job summary
         run: |

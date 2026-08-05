@@ -210,11 +210,22 @@ The parameter set is a profile decision. The reference implementation defaults t
 SHA2-256s and supports the three FIPS 205 small-signature sets, so a
 specification can fix one and an implementation can honour it:
 
-| Profile | NIST category | Verifying key | Signature | TC frames |
-|---|---|---|---|---|
-| SLH-DSA-SHA2-128s | 1 | 32 B | 7 856 B | 8 |
-| SLH-DSA-SHA2-192s | 3 | 48 B | 16 224 B | 17 |
-| **SLH-DSA-SHA2-256s** (default) | **5** | 64 B | 29 792 B | 30 |
+| Profile | NIST category | Verifying key | Signature | TC frames | Sign | Verify |
+|---|---|---|---|---|---|---|
+| SLH-DSA-SHA2-128s | 1 | 32 B | 7 856 B | 8 | 772 ms | 796 µs |
+| SLH-DSA-SHA2-192s | 3 | 48 B | 16 224 B | 17 | 1.35 s | 1.26 ms |
+| **SLH-DSA-SHA2-256s** (default) | **5** | 64 B | 29 792 B | 30 | 1.31 s | 1.82 ms |
+
+Timings are from the reference implementation on x86-64, ten samples each, and
+are reproducible from the published benchmark. They are given because the trade
+is not the smooth one the sizes suggest: **category 3 costs as much signing time
+as category 5** — the confidence intervals overlap — while offering less margin,
+so its only argument is the smaller signature. A profile selection should be
+made on size, not on an assumption that a lower category buys speed.
+
+Verification is milliseconds at every profile. The cost of this scheme falls
+entirely on the offline signing ceremony, never on the spacecraft, which never
+verifies one of these signatures on the critical path.
 
 We recommend category 5 for the space profile, and state the reasoning so it can
 be contested: this key is the longest-lived trust root in the system, and at

@@ -20,7 +20,7 @@ jobs:
           lscpu | tee cpu_info.txt
 
       - name: Run benchmarks
-        run: cargo bench --bench pqc_bench 2>&1 | tee bench_output.txt
+        run: cargo bench --features fips205 --bench pqc_bench 2>&1 | tee bench_output.txt
 
       - name: Write job summary
         run: |
