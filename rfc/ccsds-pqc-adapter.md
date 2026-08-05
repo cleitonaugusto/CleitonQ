@@ -172,14 +172,21 @@ HMAC verification per command. Measured on x86-64:
 
 | Operation | Where | Cost | Frequency |
 |---|---|---|---|
-| ML-KEM-1024 decapsulate | spacecraft | 209 µs | once per pass |
-| `CCSDS_PQC_CMD` verify | spacecraft | 2.4 µs | per command |
+| ML-KEM-1024 decapsulate | spacecraft | 190–270 µs | once per pass |
+| `CCSDS_PQC_CMD` verify | spacecraft | 2.3 µs | per command |
 | TC frame parse + FECF | spacecraft | 0.2 µs | per frame |
-| ML-DSA-87 anchor sign | **ground** | 858 µs | once per pass |
-| ML-DSA-87 anchor verify | **auditor** | 126 µs | after the fact |
+| ML-DSA-87 anchor sign | **ground** | 800–1300 µs | once per pass |
+| ML-DSA-87 anchor verify | **auditor** | 120–140 µs | after the fact |
 
-A hundred-command contact therefore costs the spacecraft about 0.43 ms of CPU,
-of which the single decapsulation is roughly half; the per-command path only
+Ranges rather than single figures, because two of these genuinely vary. **ML-DSA
+signing is variable by construction**: it uses rejection sampling, retrying until
+it finds an acceptable signature, so its cost differs between invocations and
+between signing keys. A ground station scheduling anchor generation should treat
+it as a distribution, not a constant. The per-command and per-frame operations,
+by contrast, are stable to within a few percent.
+
+A hundred-command contact costs the spacecraft roughly 0.4–0.5 ms of CPU, of
+which the single decapsulation is about half; the per-command path only
 dominates past about a hundred commands.
 
 **On flight hardware.** These are not flight-processor figures, and no scaling

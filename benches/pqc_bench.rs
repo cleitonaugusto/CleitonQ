@@ -157,27 +157,38 @@ fn bench_slh_dsa(c: &mut Criterion) {
     const MSG: &[u8] = b"revoke subject=CLQD-4F2A reason=key-compromise";
 
     fn bench_profile<P: RevocationProfile>(c: &mut Criterion, name: &str) {
-        let mut group = c.benchmark_group(format!("SLH-DSA/{name}"));
-        // Signing a single 256s signature takes on the order of a second, so the
-        // criterion default of 100 samples would put this group in the minutes.
-        group.sample_size(10).measurement_time(Duration::from_secs(20));
-
-        group.bench_function("keygen", |b| {
-            b.iter(|| black_box(RevocationSigner::<P>::generate()));
-        });
-
         let signer = RevocationSigner::<P>::generate();
-        group.bench_function("sign", |b| {
-            b.iter(|| black_box(signer.sign(black_box(MSG))));
-        });
-
         let verifier = signer.verifying_key();
         let sig = signer.sign(MSG);
-        group.bench_function("verify", |b| {
-            b.iter(|| black_box(verifier.verify(black_box(MSG), black_box(&sig))));
-        });
 
-        group.finish();
+        // Key generation and signing are seconds-scale operations, and these
+        // workflows also run on a Raspberry Pi and an ARM runner where they are
+        // slower still. The criterion default of 100 samples would put the group
+        // into the tens of minutes there, so the slow operations get the minimum
+        // sample count criterion allows and a bounded measurement window.
+        {
+            let mut slow = c.benchmark_group(format!("SLH-DSA/{name}"));
+            slow.sample_size(10).measurement_time(Duration::from_secs(20));
+            slow.bench_function("keygen", |b| {
+                b.iter(|| black_box(RevocationSigner::<P>::generate()));
+            });
+            slow.bench_function("sign", |b| {
+                b.iter(|| black_box(signer.sign(black_box(MSG))));
+            });
+            slow.finish();
+        }
+
+        // Verification is microseconds; holding it to the same twenty-second
+        // window would spend that time to learn nothing the default does not
+        // already establish in one.
+        {
+            let mut fast = c.benchmark_group(format!("SLH-DSA/{name}"));
+            fast.measurement_time(Duration::from_secs(3));
+            fast.bench_function("verify", |b| {
+                b.iter(|| black_box(verifier.verify(black_box(MSG), black_box(&sig))));
+            });
+            fast.finish();
+        }
     }
 
     // Ascending security category, so the report reads as the trade it is:
