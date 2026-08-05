@@ -562,12 +562,19 @@ mod tpm2_impl {
 
             let data = MaxNvBuffer::try_from(seed.to_vec())
                 .map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?;
+            // The index was defined with its own auth value, so it must be
+            // authorised as itself — NvAuth::NvIndex — not through the owner
+            // hierarchy. The auth value is registered against the ESYS handle
+            // first; without it the write fails with an authorisation error even
+            // though the session is present.
             let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
                 ctx.tr_from_tpm_public(nv_index.into())
             }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvWrite(e.to_string()))?.into();
+            ctx.tr_set_auth(nv_handle.into(), auth.clone())
+                .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
 
             ctx.execute_with_nullauth_session(|ctx| {
-                ctx.nv_write(NvAuth::Owner, nv_handle, data, 0)
+                ctx.nv_write(NvAuth::NvIndex(nv_handle), nv_handle, data, 0)
             }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvWrite(e.to_string()))?;
 
             Ok(())
@@ -585,8 +592,14 @@ mod tpm2_impl {
                 ctx.tr_from_tpm_public(nv_index.into())
             }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvRead(e.to_string()))?.into();
 
+            // Same as the write path: the index carries its own auth value.
+            let auth = Auth::try_from(config.auth.as_bytes().to_vec())
+                .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
+            ctx.tr_set_auth(nv_handle.into(), auth)
+                .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
+
             let data = ctx.execute_with_nullauth_session(|ctx| {
-                ctx.nv_read(NvAuth::Owner, nv_handle, 32, 0)
+                ctx.nv_read(NvAuth::NvIndex(nv_handle), nv_handle, 32, 0)
             }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvRead(e.to_string()))?;
 
             let bytes = data.to_vec();
