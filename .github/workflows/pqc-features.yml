@@ -1,0 +1,48 @@
+name: PQC feature builds
+
+# The default feature set was the only one under CI for the library itself, so
+# the FIPS 205 hash-based signature path — the long-lived trust root — could be
+# changed without any workflow exercising it. This job closes that gap.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  fips205:
+    name: SLH-DSA (FIPS 205) trust root
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Clippy (fips205)
+        run: cargo clippy --features fips205 --all-targets -- -D warnings
+
+      # SLH-DSA-SHA2-256s signing takes on the order of a second per signature,
+      # so these tests run in release: in debug the suite is slow enough to look
+      # like a hang.
+      - name: Test (fips205)
+        run: cargo test --release --features fips205
+
+  default-features:
+    name: Default features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
