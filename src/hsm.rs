@@ -96,6 +96,21 @@ mod pkcs11_impl {
     /// `sign()` call via an authenticated PKCS#11 session, used to reconstruct
     /// the `SigningKey` in a `Zeroizing` buffer, and immediately zeroized after
     /// signing. Between calls, no key material exists in process memory.
+    ///
+    /// # One signer per process
+    ///
+    /// Each `Pkcs11Signer` owns a PKCS#11 context for its whole lifetime and
+    /// calls `C_Initialize` when constructed. The PKCS#11 specification allows
+    /// `C_Initialize` once per process without an intervening `C_Finalize`, so
+    /// **constructing a second signer while the first is alive fails**, with
+    /// `CKR_CRYPTOKI_ALREADY_INITIALIZED`. Dropping a signer finalises its
+    /// context and frees the library for the next one.
+    ///
+    /// An application needing several keys should therefore serialise its use of
+    /// this type, or reach for one signer per key label taken in turn, rather
+    /// than holding two at once. This is a genuine constraint of the current
+    /// design and not merely a testing artefact; it surfaced the first time the
+    /// integration suite was actually able to run.
     pub struct Pkcs11Signer {
         ctx: Arc<Pkcs11>,
         config: Pkcs11Config,
@@ -390,13 +405,22 @@ mod pkcs11_impl {
         }
 
         /// Two labels on the same token yield two independent keys.
+        ///
+        /// The signers are built one at a time, deliberately. `Pkcs11Signer` holds
+        /// its own PKCS#11 context for its whole lifetime, and `C_Initialize` may
+        /// be called only once per process, so two live signers in one process
+        /// make the second fail to initialise. That is a real constraint on the
+        /// type rather than a quirk of this test, and it is documented on
+        /// `Pkcs11Signer` itself.
         #[test]
         #[ignore = "requires SoftHSM2 — run in CI with softhsm2.yml workflow"]
         fn pkcs11_labels_are_independent() {
-            let a = seeded_signer("MLDSA87_TEST_ROUNDTRIP", [0x42u8; 32]);
-            let b = seeded_signer("MLDSA87_TEST_REPLAY", [0x43u8; 32]);
+            let packet = {
+                let a = seeded_signer("MLDSA87_TEST_ROUNDTRIP", [0x42u8; 32]);
+                a.sign(b"ARM motors=1", 1).expect("sign failed")
+            }; // `a` is dropped here, finalising its context before `b` opens one.
 
-            let packet = a.sign(b"ARM motors=1", 1).expect("sign failed");
+            let b = seeded_signer("MLDSA87_TEST_REPLAY", [0x43u8; 32]);
             assert!(
                 b.verifying_key().verify(&packet, 0).is_none(),
                 "a signature from one label must not verify under another"
@@ -532,19 +556,19 @@ mod tpm2_impl {
             let auth = Auth::try_from(config.auth.as_bytes().to_vec())
                 .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
 
-            ctx.execute_with_session(None, |ctx| {
+            ctx.execute_with_nullauth_session(|ctx| {
                 ctx.nv_define_space(Provision::Owner, Some(auth.clone()), nv_public)
-            }).map_err(|e| Tpm2SignerError::NvDefine(e.to_string()))?;
+            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvDefine(e.to_string()))?;
 
             let data = MaxNvBuffer::try_from(seed.to_vec())
                 .map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?;
-            let nv_handle: NvIndexHandle = ctx.execute_with_session(None, |ctx| {
+            let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
                 ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?.into();
+            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvWrite(e.to_string()))?.into();
 
-            ctx.execute_with_session(None, |ctx| {
+            ctx.execute_with_nullauth_session(|ctx| {
                 ctx.nv_write(NvAuth::Owner, nv_handle, data, 0)
-            }).map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?;
+            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvWrite(e.to_string()))?;
 
             Ok(())
         }
@@ -557,13 +581,13 @@ mod tpm2_impl {
 
             let nv_index = NvIndexTpmHandle::new(config.nv_index)
                 .map_err(|e| Tpm2SignerError::NvIndex(e.to_string()))?;
-            let nv_handle: NvIndexHandle = ctx.execute_with_session(None, |ctx| {
+            let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
                 ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e| Tpm2SignerError::NvRead(e.to_string()))?.into();
+            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvRead(e.to_string()))?.into();
 
-            let data = ctx.execute_with_session(None, |ctx| {
+            let data = ctx.execute_with_nullauth_session(|ctx| {
                 ctx.nv_read(NvAuth::Owner, nv_handle, 32, 0)
-            }).map_err(|e| Tpm2SignerError::NvRead(e.to_string()))?;
+            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvRead(e.to_string()))?;
 
             let bytes = data.to_vec();
             if bytes.len() != 32 {
