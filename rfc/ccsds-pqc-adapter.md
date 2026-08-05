@@ -114,6 +114,19 @@ inspecting content.
 
 ## 3. Protocol Design
 
+### 3.0 Conventions
+
+**All multi-byte integers in this specification are big-endian**, consistent
+with CCSDS practice, in every structure defined here — `CCSDS_PQC_CMD`,
+`CCSDS_PQC_ANCHOR` and the `CCSDS_PQC_CHUNK` header alike. Field widths are
+given in octets.
+
+Known-answer test vectors pinning every byte of these formats are published
+alongside this specification, so an implementation in any language can be
+checked against a fixed reference. The vectors deliberately do not re-cover the
+NIST primitives themselves (ML-KEM, ML-DSA, SHA3), which have their own official
+vectors; they pin how this adapter composes them.
+
 ### 3.1 Session establishment (one-time per mission phase)
 
 The ML-KEM-1024 session is established during a designated key-exchange window,
