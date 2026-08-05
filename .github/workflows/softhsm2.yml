@@ -86,10 +86,14 @@ jobs:
 
       - name: Run PKCS#11 integration tests
         run: |
+          # Single-threaded on purpose. These tests share one SoftHSM2 token,
+          # and each signer constructs its own PKCS#11 context whose Drop calls
+          # C_Finalize; running them concurrently tears the library down under a
+          # sibling test and segfaults instead of failing an assertion.
           cargo test --features pkcs11 -- \
             --include-ignored \
-            pkcs11_softhsm2 \
-            pkcs11_replay_rejected \
+            --test-threads=1 \
+            pkcs11_ \
             2>&1
         env:
           SOFTHSM2_CONF: /tmp/softhsm2.conf

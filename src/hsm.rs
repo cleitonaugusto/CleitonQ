@@ -306,15 +306,31 @@ mod pkcs11_impl {
         /// `key_label` is per-test: `cargo test` runs tests in parallel, and two
         /// tests sharing one seed object made each depend on the other having run
         /// first.
+        /// Discovers the slot exactly once per process.
+        ///
+        /// PKCS#11 requires `C_Initialize` to be called once per process, and
+        /// `Pkcs11`'s Drop calls `C_Finalize`. Creating a context per call — as
+        /// an earlier version of this helper did — meant repeatedly initialising
+        /// and finalising the library underneath signers that were still using
+        /// it, which segfaults rather than returning an error. The discovery
+        /// context is built once, its answer cached, and it is dropped before any
+        /// signer is constructed.
+        fn cached_slot(library: &str) -> u64 {
+            static SLOT: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+            *SLOT.get_or_init(|| {
+                let ctx = Pkcs11::new(library).expect("cannot load PKCS#11 library");
+                ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
+                    .expect("cannot initialise PKCS#11");
+                discover_slot(&ctx)
+            })
+        }
+
         fn ci_config(key_label: &str) -> Pkcs11Config {
             let library = std::env::var("SOFTHSM2_LIB")
                 .unwrap_or_else(|_| "/usr/lib/softhsm/libsofthsm2.so".into());
-            let ctx = Pkcs11::new(&library).expect("cannot load PKCS#11 library");
-            ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
-                .expect("cannot initialise PKCS#11");
             Pkcs11Config {
+                slot: cached_slot(&library),
                 library: PathBuf::from(library),
-                slot: discover_slot(&ctx),
                 pin: std::env::var("SOFTHSM2_PIN").unwrap_or_else(|_| "cleitonq1234".into()),
                 key_label: key_label.into(),
             }
@@ -400,10 +416,13 @@ mod tpm2_impl {
     use tss_esapi::{
         Context, TctiNameConf,
         attributes::NvIndexAttributesBuilder,
-        handles::NvIndexTpmHandle,
+        handles::{NvIndexHandle, NvIndexTpmHandle},
         interface_types::{
             algorithm::HashingAlgorithm,
-            resource_handles::NvAuth,
+            // nv_define_space is authorised as a Provision (owner/platform);
+            // nv_read and nv_write are authorised as an NvAuth. They are
+            // different types in this API and are not interchangeable.
+            resource_handles::{NvAuth, Provision},
         },
         structures::{NvPublicBuilder, MaxNvBuffer, Auth},
     };
@@ -514,14 +533,14 @@ mod tpm2_impl {
                 .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
 
             ctx.execute_with_session(None, |ctx| {
-                ctx.nv_define_space(NvAuth::Owner, Some(auth.clone()), nv_public)
+                ctx.nv_define_space(Provision::Owner, Some(auth.clone()), nv_public)
             }).map_err(|e| Tpm2SignerError::NvDefine(e.to_string()))?;
 
             let data = MaxNvBuffer::try_from(seed.to_vec())
                 .map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?;
-            let nv_handle = ctx.execute_with_session(None, |ctx| {
+            let nv_handle: NvIndexHandle = ctx.execute_with_session(None, |ctx| {
                 ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?;
+            }).map_err(|e| Tpm2SignerError::NvWrite(e.to_string()))?.into();
 
             ctx.execute_with_session(None, |ctx| {
                 ctx.nv_write(NvAuth::Owner, nv_handle, data, 0)
@@ -538,9 +557,9 @@ mod tpm2_impl {
 
             let nv_index = NvIndexTpmHandle::new(config.nv_index)
                 .map_err(|e| Tpm2SignerError::NvIndex(e.to_string()))?;
-            let nv_handle = ctx.execute_with_session(None, |ctx| {
+            let nv_handle: NvIndexHandle = ctx.execute_with_session(None, |ctx| {
                 ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e| Tpm2SignerError::NvRead(e.to_string()))?;
+            }).map_err(|e| Tpm2SignerError::NvRead(e.to_string()))?.into();
 
             let data = ctx.execute_with_session(None, |ctx| {
                 ctx.nv_read(NvAuth::Owner, nv_handle, 32, 0)
