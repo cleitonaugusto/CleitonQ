@@ -10,7 +10,7 @@ jobs:
     name: no_std + alloc (x86-64)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -25,7 +25,7 @@ jobs:
     name: no_std bare-metal (Cortex-M4F / Pixhawk)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust with Cortex-M target
         uses: dtolnay/rust-toolchain@stable

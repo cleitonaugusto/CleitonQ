@@ -2,12 +2,31 @@
 
 //! SLH-DSA (FIPS 205) stateless hash-based signatures for long-lived certificates.
 //!
-//! Uses the SHA2-256s parameter set: 64-byte verifying key, 29792-byte signature.
 //! Unlike ML-DSA (lattice-based), SLH-DSA requires only hash security assumptions.
 //! This provides defense-in-depth: if lattice hardness is ever questioned,
 //! SLH-DSA revocation certificates remain secure.
 //!
-//! # Why SHA2-256s and not a smaller parameter set
+//! # Profiles
+//!
+//! The parameter set is a deployment decision, not an implementation detail, so
+//! the scheme is generic over [`RevocationProfile`] and ships the three
+//! "small signature" sets as named profiles:
+//!
+//! | Profile | NIST category | Verifying key | Signature |
+//! |---|---|---|---|
+//! | `Sha2_128s` | 1 | 32 B | 7 856 B |
+//! | `Sha2_192s` | 3 | 48 B | 16 224 B |
+//! | [`DefaultProfile`] (`Sha2_256s`) | 5 | 64 B | 29 792 B |
+//!
+//! `RevocationSigner` with no type argument means [`DefaultProfile`]. A
+//! constrained link may fix a lower profile deliberately — a 29 792-byte
+//! signature is 120 fragments over a 255-byte radio frame — but that choice
+//! should be made and written down, not inherited.
+//!
+//! The declared sizes are asserted against what the implementation produces, so
+//! a specification quoting this table cannot silently drift from the code.
+//!
+//! # Why the default is SHA2-256s and not a smaller parameter set
 //!
 //! This key is the **longest-lived key in the system** — a trust root that must
 //! still be verifiable after the operational keys it revokes are long gone. It
@@ -15,10 +34,11 @@
 //!
 //! The operational signature is ML-DSA-87, which is NIST security category 5.
 //! SLH-DSA-SHA2-256s is also category 5, so the trust root and the fast path sit
-//! at the same level. An earlier revision of this module used SHA2-128s
-//! (category 1), which inverted that relationship: the key with the longest
-//! horizon was the weakest link, undercutting the very conservatism the
-//! hash-based scheme is here to provide.
+//! at the same level. An earlier revision of this module fixed SHA2-128s
+//! (category 1) as the only option, which inverted that relationship: the key
+//! with the longest horizon was the weakest link, undercutting the very
+//! conservatism the hash-based scheme is here to provide. A deployment may still
+//! choose a lower profile for a constrained link, but it now does so explicitly.
 //!
 //! The cost of the choice is signature size — 29792 bytes against 7856 — and
 //! slower signing. Both are acceptable here precisely because this scheme is
@@ -56,82 +76,155 @@
 use alloc::vec::Vec;
 
 use slh_dsa::{
-    Sha2_256s,
-    signature::{Signer as _, Verifier as _, Keypair as _},
+    ParameterSet, Sha2_128s, Sha2_192s, Sha2_256s,
+    signature::{Keypair as _, Signer as _, Verifier as _},
 };
 
-/// Size of the SLH-DSA-SHA2-256s signing key in bytes.
-pub const SLH_SK_BYTES: usize = 128;
-/// Size of the SLH-DSA-SHA2-256s verifying key in bytes.
-pub const SLH_VK_BYTES: usize = 64;
-/// Size of an SLH-DSA-SHA2-256s signature in bytes.
-pub const SLH_SIG_BYTES: usize = 29792;
+/// A revocation profile: a FIPS 205 parameter set together with the sizes it
+/// produces and the NIST category it reaches.
+///
+/// The parameter set is a deployment decision, not an implementation detail. A
+/// trust root guarding a spacecraft for twenty-five years and one carried over a
+/// 255-byte radio frame face the same trade — signature size against security
+/// margin — and land in different places. Rather than hard-code one answer, the
+/// scheme is generic over this trait and ships the three "small signature"
+/// parameter sets as named profiles, so a specification can fix a profile and an
+/// implementation can honour it.
+///
+/// `slh_dsa::ParameterSet` is deliberately closed to outside implementation, so
+/// this trait is implemented here for the three sets we expose rather than being
+/// open-ended. Adding a fourth is a one-line impl plus its size constants.
+pub trait RevocationProfile: ParameterSet {
+    /// NIST security category reached by this parameter set.
+    const NIST_CATEGORY: u8;
+    /// Serialized signing-key length in bytes.
+    const SK_BYTES: usize;
+    /// Serialized verifying-key length in bytes.
+    const VK_BYTES: usize;
+    /// Signature length in bytes.
+    const SIG_BYTES: usize;
+}
 
-/// SLH-DSA-SHA2-256s signing key for long-lived revocation certificates.
-pub struct RevocationSigner(slh_dsa::SigningKey<Sha2_256s>);
+impl RevocationProfile for Sha2_256s {
+    const NIST_CATEGORY: u8 = 5;
+    const SK_BYTES: usize = 128;
+    const VK_BYTES: usize = 64;
+    const SIG_BYTES: usize = 29792;
+}
 
-/// SLH-DSA-SHA2-256s verifying key (distribute to all validators).
-pub struct RevocationVerifier(slh_dsa::VerifyingKey<Sha2_256s>);
+impl RevocationProfile for Sha2_192s {
+    const NIST_CATEGORY: u8 = 3;
+    const SK_BYTES: usize = 96;
+    const VK_BYTES: usize = 48;
+    const SIG_BYTES: usize = 16224;
+}
 
-impl RevocationSigner {
-    /// Generates a fresh SLH-DSA-SHA2-256s signing key using the OS CSPRNG.
+impl RevocationProfile for Sha2_128s {
+    const NIST_CATEGORY: u8 = 1;
+    const SK_BYTES: usize = 64;
+    const VK_BYTES: usize = 32;
+    const SIG_BYTES: usize = 7856;
+}
+
+// Signature size must increase with the security category. This is a property of
+// the profiles as declared, so it is checked when the crate builds rather than
+// when a test runs: getting it wrong means a size constant is transcribed
+// incorrectly, and that should never reach a specification quoting this table.
+const _: () = {
+    assert!(Sha2_128s::SIG_BYTES < Sha2_192s::SIG_BYTES);
+    assert!(Sha2_192s::SIG_BYTES < Sha2_256s::SIG_BYTES);
+    assert!(Sha2_128s::VK_BYTES < Sha2_192s::VK_BYTES);
+    assert!(Sha2_192s::VK_BYTES < Sha2_256s::VK_BYTES);
+};
+
+/// The default profile: SLH-DSA-SHA2-256s, NIST category 5.
+///
+/// Chosen so the trust root is no weaker than the ML-DSA-87 operational path it
+/// backstops. See the module documentation for why the inverse would undermine
+/// the argument for having a hash-based fallback at all.
+pub type DefaultProfile = Sha2_256s;
+
+/// Size of the default profile's signing key in bytes.
+pub const SLH_SK_BYTES: usize = <DefaultProfile as RevocationProfile>::SK_BYTES;
+/// Size of the default profile's verifying key in bytes.
+pub const SLH_VK_BYTES: usize = <DefaultProfile as RevocationProfile>::VK_BYTES;
+/// Size of a default-profile signature in bytes.
+pub const SLH_SIG_BYTES: usize = <DefaultProfile as RevocationProfile>::SIG_BYTES;
+
+/// SLH-DSA signing key for long-lived revocation certificates.
+///
+/// Defaults to [`DefaultProfile`], so `RevocationSigner` alone means category 5.
+pub struct RevocationSigner<P: RevocationProfile = DefaultProfile>(slh_dsa::SigningKey<P>);
+
+/// SLH-DSA verifying key (distribute to all validators).
+pub struct RevocationVerifier<P: RevocationProfile = DefaultProfile>(slh_dsa::VerifyingKey<P>);
+
+impl<P: RevocationProfile> RevocationSigner<P> {
+    /// Generates a fresh signing key using the OS CSPRNG.
     #[cfg(feature = "fips205")]
     pub fn generate() -> Self {
         use rand_core::UnwrapErr;
         let mut rng = UnwrapErr(getrandom::SysRng);
-        Self(slh_dsa::SigningKey::<Sha2_256s>::new(&mut rng))
+        Self(slh_dsa::SigningKey::<P>::new(&mut rng))
     }
 
     /// Generates a signing key from the provided CSPRNG (embedded targets).
     pub fn generate_from_rng<R: rand_core::CryptoRng>(rng: &mut R) -> Self {
-        Self(slh_dsa::SigningKey::<Sha2_256s>::new(rng))
+        Self(slh_dsa::SigningKey::<P>::new(rng))
     }
 
-    /// Reconstructs a signing key from its 128-byte serialized form.
-    pub fn from_bytes(bytes: &[u8; SLH_SK_BYTES]) -> Option<Self> {
-        slh_dsa::SigningKey::<Sha2_256s>::try_from(bytes.as_ref()).ok().map(Self)
+    /// Reconstructs a signing key from its serialized form.
+    ///
+    /// Returns `None` if the length does not match this profile, which also
+    /// rejects a key serialized under a different parameter set.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != P::SK_BYTES {
+            return None;
+        }
+        slh_dsa::SigningKey::<P>::try_from(bytes).ok().map(Self)
     }
 
-    /// Serializes the signing key to 128 bytes. **Keep secret.**
-    pub fn to_bytes(&self) -> [u8; SLH_SK_BYTES] {
+    /// Serializes the signing key. **Keep secret.**
+    pub fn to_bytes(&self) -> Vec<u8> {
         let arr = self.0.to_bytes();
-        let mut out = [0u8; SLH_SK_BYTES];
-        out.copy_from_slice(arr.as_ref());
-        out
+        arr[..].to_vec()
     }
 
     /// Returns the corresponding verifying key.
-    pub fn verifying_key(&self) -> RevocationVerifier {
+    pub fn verifying_key(&self) -> RevocationVerifier<P> {
         RevocationVerifier(self.0.verifying_key().clone())
     }
 
-    /// Signs `message` and returns the 29792-byte SLH-DSA signature.
+    /// Signs `message` and returns the signature.
     ///
     /// Deterministic (pure) signing variant — safe for revocation certs where
-    /// the message already contains sufficient context (drone ID, timestamp).
+    /// the message already contains sufficient context (subject ID, timestamp).
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        let sig: slh_dsa::Signature<Sha2_256s> = self.0.sign(message);
+        let sig: slh_dsa::Signature<P> = self.0.sign(message);
         sig.to_vec()
     }
 }
 
-impl RevocationVerifier {
-    /// Reconstructs a verifying key from its 64-byte serialized form.
-    pub fn from_bytes(bytes: &[u8; SLH_VK_BYTES]) -> Option<Self> {
-        slh_dsa::VerifyingKey::<Sha2_256s>::try_from(bytes.as_ref()).ok().map(Self)
+impl<P: RevocationProfile> RevocationVerifier<P> {
+    /// Reconstructs a verifying key from its serialized form.
+    ///
+    /// Returns `None` if the length does not match this profile.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != P::VK_BYTES {
+            return None;
+        }
+        slh_dsa::VerifyingKey::<P>::try_from(bytes).ok().map(Self)
     }
 
-    /// Serializes the verifying key to 64 bytes.
-    pub fn to_bytes(&self) -> [u8; SLH_VK_BYTES] {
+    /// Serializes the verifying key.
+    pub fn to_bytes(&self) -> Vec<u8> {
         let arr = self.0.to_bytes();
-        let mut out = [0u8; SLH_VK_BYTES];
-        out.copy_from_slice(arr.as_ref());
-        out
+        arr[..].to_vec()
     }
 
-    /// Verifies an SLH-DSA signature. Returns `true` if valid.
+    /// Verifies a signature. Returns `true` if valid under this profile.
     pub fn verify(&self, message: &[u8], sig: &[u8]) -> bool {
-        let Ok(parsed) = slh_dsa::Signature::<Sha2_256s>::try_from(sig) else {
+        let Ok(parsed) = slh_dsa::Signature::<P>::try_from(sig) else {
             return false;
         };
         self.0.verify(message, &parsed).is_ok()
@@ -142,67 +235,104 @@ impl RevocationVerifier {
 mod tests {
     use super::*;
 
-    #[test]
-    fn roundtrip() {
-        let signer = RevocationSigner::generate();
+    /// Exercises one profile end to end. Every profile must satisfy the same
+    /// contract, so the body is written once and instantiated per parameter set.
+    fn profile_roundtrip<P: RevocationProfile>() {
+        let signer = RevocationSigner::<P>::generate();
         let verifier = signer.verifying_key();
 
-        let msg = b"revoke drone_id=CLQD-4F2A timestamp=2026-06-25T00:00:00Z";
+        let msg = b"revoke subject=CLQD-4F2A timestamp=2026-06-25T00:00:00Z";
         let sig = signer.sign(msg);
 
-        assert_eq!(sig.len(), SLH_SIG_BYTES);
+        assert_eq!(sig.len(), P::SIG_BYTES, "signature length must match the profile");
+        assert_eq!(signer.to_bytes().len(), P::SK_BYTES);
+        assert_eq!(verifier.to_bytes().len(), P::VK_BYTES);
         assert!(verifier.verify(msg, &sig));
+
+        // Wrong message, truncated signature, and a signature from another key
+        // must all fail under every profile.
+        assert!(!verifier.verify(b"revoke subject=OTHER", &sig));
+        assert!(!verifier.verify(msg, &sig[..sig.len() - 1]));
+        let other = RevocationSigner::<P>::generate();
+        assert!(!other.verifying_key().verify(msg, &sig));
+
+        // Serialization round-trips.
+        let sk = RevocationSigner::<P>::from_bytes(&signer.to_bytes()).expect("valid sk");
+        let vk = RevocationVerifier::<P>::from_bytes(&verifier.to_bytes()).expect("valid vk");
+        assert!(vk.verify(msg, &sk.sign(msg)));
     }
 
     #[test]
-    fn wrong_message_rejected() {
-        let signer = RevocationSigner::generate();
-        let verifier = signer.verifying_key();
+    fn category5_sha2_256s() {
+        profile_roundtrip::<Sha2_256s>();
+    }
 
-        let sig = signer.sign(b"revoke drone=A");
-        assert!(!verifier.verify(b"revoke drone=B", &sig));
+    /// The lower profiles are exercised too, and are far cheaper to run, which is
+    /// why they carry the size and cross-profile checks that would otherwise make
+    /// the category-5 test slower still.
+    #[test]
+    fn category3_sha2_192s() {
+        profile_roundtrip::<Sha2_192s>();
     }
 
     #[test]
-    fn wrong_key_rejected() {
-        let signer_a = RevocationSigner::generate();
-        let signer_b = RevocationSigner::generate();
-        let verifier_b = signer_b.verifying_key();
+    fn category1_sha2_128s() {
+        profile_roundtrip::<Sha2_128s>();
+    }
 
-        let sig = signer_a.sign(b"revoke drone=A");
-        assert!(!verifier_b.verify(b"revoke drone=A", &sig));
+    /// The size constants are asserted against what the implementation actually
+    /// produces, so a wrong constant cannot ship: it fails here rather than
+    /// silently mis-describing a profile in a specification.
+    #[test]
+    fn declared_sizes_match_reality() {
+        fn check<P: RevocationProfile>() {
+            let s = RevocationSigner::<P>::generate();
+            assert_eq!(s.to_bytes().len(), P::SK_BYTES, "SK_BYTES wrong for {}", P::NAME);
+            assert_eq!(s.verifying_key().to_bytes().len(), P::VK_BYTES, "VK_BYTES wrong for {}", P::NAME);
+            assert_eq!(s.sign(b"x").len(), P::SIG_BYTES, "SIG_BYTES wrong for {}", P::NAME);
+        }
+        check::<Sha2_128s>();
+        check::<Sha2_192s>();
+        // Category 5 is covered by category5_sha2_256s; generating another
+        // 256s key here would add a second ~1.2 s signing operation for nothing.
+    }
+
+    /// Categories must be ordered as the profiles claim, and the default must be
+    /// the one that matches the ML-DSA-87 operational path.
+    #[test]
+    fn profile_ordering_and_default() {
+        assert_eq!(Sha2_128s::NIST_CATEGORY, 1);
+        assert_eq!(Sha2_192s::NIST_CATEGORY, 3);
+        assert_eq!(Sha2_256s::NIST_CATEGORY, 5);
+        // The default profile is category 5, and the compatibility constants
+        // describe it. A change to the default that forgot these would fail here.
+        assert_eq!(<DefaultProfile as RevocationProfile>::NIST_CATEGORY, 5);
+        assert_eq!(SLH_SK_BYTES, <DefaultProfile as RevocationProfile>::SK_BYTES);
+        assert_eq!(SLH_VK_BYTES, <DefaultProfile as RevocationProfile>::VK_BYTES);
+        assert_eq!(SLH_SIG_BYTES, <DefaultProfile as RevocationProfile>::SIG_BYTES);
+    }
+
+    /// A key or signature from one profile must not be accepted by another.
+    /// Uses the two cheap profiles so the check costs little.
+    #[test]
+    fn profiles_do_not_interoperate() {
+        let a = RevocationSigner::<Sha2_128s>::generate();
+        let msg = b"revoke subject=X";
+        let sig_a = a.sign(msg);
+
+        // A 128s signature is the wrong length for a 192s verifier.
+        let b = RevocationSigner::<Sha2_192s>::generate();
+        assert!(!b.verifying_key().verify(msg, &sig_a));
+
+        // And key material does not cross profiles either.
+        assert!(RevocationVerifier::<Sha2_192s>::from_bytes(&a.verifying_key().to_bytes()).is_none());
+        assert!(RevocationSigner::<Sha2_192s>::from_bytes(&a.to_bytes()).is_none());
     }
 
     #[test]
-    fn truncated_sig_rejected() {
-        let signer = RevocationSigner::generate();
-        let verifier = signer.verifying_key();
-
-        let msg = b"revoke drone=X";
-        let sig = signer.sign(msg);
-        let truncated = &sig[..100];
-        assert!(!verifier.verify(msg, truncated));
-    }
-
-    #[test]
-    fn key_serialization_roundtrip() {
-        let signer = RevocationSigner::generate();
-        let sk_bytes = signer.to_bytes();
-        let vk_bytes = signer.verifying_key().to_bytes();
-
-        let restored = RevocationSigner::from_bytes(&sk_bytes).expect("valid");
-        let restored_vk = RevocationVerifier::from_bytes(&vk_bytes).expect("valid");
-
-        let msg = b"revoke drone=test";
-        let sig = restored.sign(msg);
-        assert!(restored_vk.verify(msg, &sig));
-    }
-
-    #[test]
-    fn key_sizes() {
-        let signer = RevocationSigner::generate();
-        assert_eq!(signer.to_bytes().len(), SLH_SK_BYTES);
-        assert_eq!(signer.verifying_key().to_bytes().len(), SLH_VK_BYTES);
-        assert_eq!(signer.sign(b"test").len(), SLH_SIG_BYTES);
+    fn malformed_key_material_is_rejected() {
+        assert!(RevocationSigner::<Sha2_128s>::from_bytes(&[]).is_none());
+        assert!(RevocationVerifier::<Sha2_128s>::from_bytes(&[0u8; 31]).is_none());
+        assert!(RevocationVerifier::<Sha2_128s>::from_bytes(&[0u8; 33]).is_none());
     }
 }

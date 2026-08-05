@@ -206,11 +206,27 @@ instrument is a certificate signed by the long-lived SLH-DSA-SHA2-256s trust roo
 (FIPS 205), which rests on hash assumptions alone and is therefore independent of
 the lattice path it revokes.
 
-The parameter set is deliberately SHA2-256s rather than a smaller one: this key
-is the longest-lived trust root in the system, and at NIST security category 5 it
-matches ML-DSA-87 rather than sitting below the operational path it backstops. At
-29792 bytes the signature spans 30 TC frames — a cost paid at most once per
-mission, in the rarest event the design contemplates.
+The parameter set is a profile decision. The reference implementation defaults to
+SHA2-256s and supports the three FIPS 205 small-signature sets, so a
+specification can fix one and an implementation can honour it:
+
+| Profile | NIST category | Verifying key | Signature | TC frames |
+|---|---|---|---|---|
+| SLH-DSA-SHA2-128s | 1 | 32 B | 7 856 B | 8 |
+| SLH-DSA-SHA2-192s | 3 | 48 B | 16 224 B | 17 |
+| **SLH-DSA-SHA2-256s** (default) | **5** | 64 B | 29 792 B | 30 |
+
+We recommend category 5 for the space profile, and state the reasoning so it can
+be contested: this key is the longest-lived trust root in the system, and at
+category 5 it matches ML-DSA-87 rather than sitting below the operational path it
+backstops. The cost — 30 frames — is paid at most once per mission, in the rarest
+event the design contemplates.
+
+The recommendation is not universal, which is why this is a profile rather than a
+constant. The same certificate over a narrowband link with a 255-byte frame is
+120 fragments at category 5 and 32 at category 1, and there the trade may fall
+the other way. A constrained profile should be chosen deliberately and recorded,
+not inherited by default.
 
 **What is undefined, and belongs to working-group discussion rather than to this
 document:** the certificate's field layout; whether revocation is permanent or

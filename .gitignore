@@ -3,3 +3,8 @@
 *.bin
 Cargo.lock
 /STRATEGY_PRIVATE.md
+
+# Editor and interpreter droppings — never part of the source tree.
+/.vscode/
+__pycache__/
+*.pyc

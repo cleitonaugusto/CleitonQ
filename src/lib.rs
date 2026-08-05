@@ -93,7 +93,10 @@ pub mod prelude {
     pub use crate::sealed::{SealedChannel, SEALED_OVERHEAD};
     pub use crate::signer::{InMemorySigner, Signer, SignerError};
     #[cfg(feature = "fips205")]
-    pub use crate::fips205::{RevocationSigner, RevocationVerifier, SLH_SIG_BYTES, SLH_SK_BYTES, SLH_VK_BYTES};
+    pub use crate::fips205::{
+        DefaultProfile, RevocationProfile, RevocationSigner, RevocationVerifier, SLH_SIG_BYTES,
+        SLH_SK_BYTES, SLH_VK_BYTES,
+    };
 }
 
 /// CleitonQ crate version.
