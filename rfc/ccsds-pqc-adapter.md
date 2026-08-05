@@ -102,7 +102,7 @@ LEO is the constraining case: 45 KB minimum per pass, 2 kbps worst case.
 | ML-KEM-1024 ciphertext | 1568 bytes | ❌ spans 2 frames | ✅ 1 frame burst |
 | ML-DSA-87 signature | 4627 bytes | ❌ spans 5 frames | ✅ (sparse use) |
 | HMAC-SHA3-256 tag | 32 bytes | ✅ 32/1024 = 3% | ✅ |
-| SLH-DSA-SHA2-256s signature | 29792 bytes | ❌ spans 30 frames | ✅ (1/mission) |
+| SLH-DSA-SHA2-256s signature | 29792 bytes | ❌ spans 30 frames | ✅ (1/mission, §3.4 reserved) |
 
 **Key finding:** ML-KEM and ML-DSA outputs do not fit in a single TC frame.
 CLEITONQ_CHUNK fragmentation (the same mechanism used for MAVLink relay-transparency)
@@ -192,16 +192,39 @@ The anchor enables post-mission audit: any third party with the ground station's
 ML-DSA-87 verifying key can verify the authenticity of the entire command sequence
 for a given contact window, without access to the symmetric session key.
 
-### 3.4 Mission-lifetime key revocation (rare)
+### 3.4 Mission-lifetime key revocation (rare) — NOT YET SPECIFIED
 
-SLH-DSA-SHA2-256s (FIPS 205) revocation certificates are transmitted once if
-the ML-DSA-87 signing key is compromised. At 29792 bytes, this requires 30 TC
-frames and is transmitted as a high-priority sequence.
+> **Status: reserved, not implemented.** This section states a requirement and a
+> size budget. It does not yet define a wire format, and no implementation of it
+> exists. `CCSDS_PQC_CHUNK` type `0x03` is reserved for it. Earlier revisions of
+> this document described the mechanism as though it were defined; it is not.
+
+If the ground segment's ML-DSA-87 signing key is compromised, a spacecraft that
+has been provisioned with its verifying key must be able to learn that the key is
+no longer trustworthy, and to do so without relying on that same key. The natural
+instrument is a certificate signed by the long-lived SLH-DSA-SHA2-256s trust root
+(FIPS 205), which rests on hash assumptions alone and is therefore independent of
+the lattice path it revokes.
 
 The parameter set is deliberately SHA2-256s rather than a smaller one: this key
 is the longest-lived trust root in the system, and at NIST security category 5 it
-matches ML-DSA-87 rather than sitting below the operational path it backstops.
-The cost is paid once per mission, in the rarest event the design contemplates.
+matches ML-DSA-87 rather than sitting below the operational path it backstops. At
+29792 bytes the signature spans 30 TC frames — a cost paid at most once per
+mission, in the rarest event the design contemplates.
+
+**What is undefined, and belongs to working-group discussion rather than to this
+document:** the certificate's field layout; whether revocation is permanent or
+carries a successor key; how the spacecraft obtains a replacement verifying key
+once the old one is repudiated; whether the spacecraft may act on a revocation
+received over the very link the revoked key authenticated; and what it should do
+in the interval between revocation and re-provisioning. These are protocol
+questions, not encoding questions, and specifying the object without settling
+them would only look complete.
+
+The reference implementation does contain an SLH-DSA revocation certificate, but
+it revokes a *peer node identifier* in a fleet registry — a different object with
+different semantics, belonging to the MAVLink profile rather than to this
+adapter. It is not the mechanism described here and should not be read as one.
 
 ---
 
