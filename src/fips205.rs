@@ -25,10 +25,28 @@
 //! never on a per-packet path: signing happens offline (see below), rarely, and
 //! the signature is not transmitted at line rate.
 //!
+//! # Cost
+//!
+//! Signing is roughly three to four thousand times slower than ML-DSA-87 — not
+//! the one-to-two orders of magnitude an earlier revision of this note claimed,
+//! which was written when this module used SHA2-128s. Measured on an x86-64
+//! development machine, release build, as an order-of-magnitude guide rather
+//! than a benchmark:
+//!
+//! | Operation | ML-DSA-87 | SLH-DSA-SHA2-256s |
+//! |---|---|---|
+//! | Key generation | 0.6 ms | 96 ms |
+//! | Sign | 0.3 ms | 1.14 s |
+//! | Verify | — | 1.6 ms |
+//!
+//! Verification stays cheap, which is what matters: signing happens once, on an
+//! offline machine, and every later check of that signature is milliseconds.
+//! Budget for the signing cost in any ceremony that produces one of these, and
+//! expect a test suite that generates them to be slow.
+//!
 //! # Intended use
 //!
-//! SLH-DSA is 10-100× slower to sign than ML-DSA-87 and produces larger signatures.
-//! Use it only for **infrequent, long-lived signatures** such as:
+//! Use this only for **infrequent, long-lived signatures** such as:
 //! - Drone key revocation certificates (verified in 15+ years)
 //! - Root CA certificates in a SwarmKeyRegistry
 //! - Operator credential attestations with multi-year validity
