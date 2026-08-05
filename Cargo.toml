@@ -53,8 +53,13 @@ x25519-dalek = { version = "2.0", optional = true, features = ["static_secrets"]
 # HSM / PKCS#11 backend
 cryptoki = { version = "0.12", optional = true }
 
-# TPM2 backend — only alpha available as of 2026-06; pin to exact version
-tss-esapi = { version = "=8.0.0-alpha.2", optional = true }
+# TPM2 backend. Was pinned to =8.0.0-alpha.2 on the belief that only an alpha
+# was published; 7.x is in fact the maintained line and 7.7.0 postdates that
+# alpha. The alpha does not build: its generated bindings reference types
+# (TPMI_DH_SAVED) that the current tpm2-tss headers no longer provide, which is
+# why the TPM2 CI job had never once passed. Every symbol this crate uses is
+# present in 7.7.
+tss-esapi = { version = "7.7", optional = true }
 
 # Utility
 zeroize = { version = "1.7", features = ["derive"] }

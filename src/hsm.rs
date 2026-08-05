@@ -56,7 +56,7 @@
 #[cfg(feature = "pkcs11")]
 mod pkcs11_impl {
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use zeroize::Zeroizing;
 
     use cryptoki::{
@@ -262,68 +262,129 @@ mod pkcs11_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::dsa::SigningKey;
         use crate::signer::Signer;
 
-        /// Integration test against SoftHSM2.
+        /// Locates the SoftHSM2 token to test against.
         ///
-        /// Requires:
-        ///   export SOFTHSM2_CONF=/tmp/softhsm2-ci.conf
-        ///   softhsm2-util --init-token --slot 0 --label CleitonQ-CI \
-        ///                 --pin cleitonq1234 --so-pin 00000000
+        /// The slot is discovered rather than assumed. `softhsm2-util
+        /// --init-token` does not leave the token in the slot it was given: it
+        /// reassigns a fresh slot ID and the requested one is left
+        /// uninitialised. Hard-coding slot 0 therefore fails with "the specified
+        /// slot ID is not valid" no matter how the token was created, which is
+        /// what kept this suite red. Enumerating slots also lets the tests run on
+        /// a developer machine whose token layout we do not control.
         ///
-        /// Run with: cargo test --features pkcs11 -- pkcs11_softhsm2 --ignored
+        /// `SOFTHSM2_SLOT` overrides the search when a specific slot is wanted.
+        fn discover_slot(ctx: &Pkcs11) -> u64 {
+            if let Ok(explicit) = std::env::var("SOFTHSM2_SLOT") {
+                return explicit.parse().expect("SOFTHSM2_SLOT must be a number");
+            }
+            let slots = ctx.get_slots_with_token().expect("cannot enumerate slots");
+            assert!(
+                !slots.is_empty(),
+                "no initialised SoftHSM2 token found — run softhsm2-util --init-token first"
+            );
+            // Prefer the token this project initialises; fall back to the first
+            // one present so a developer's own token also works.
+            let wanted = std::env::var("SOFTHSM2_LABEL").unwrap_or_else(|_| "CleitonQ-CI".into());
+            for slot in &slots {
+                if let Ok(info) = ctx.get_token_info(*slot) {
+                    if info.label().trim() == wanted {
+                        return slot.id();
+                    }
+                }
+            }
+            slots[0].id()
+        }
+
+        /// Builds a config pointing at the discovered token.
+        ///
+        /// Every value the CI also sets is read from the environment. The PIN in
+        /// particular was previously hard-coded here and set to something else by
+        /// the workflow, so login would have failed even with the right slot.
+        ///
+        /// `key_label` is per-test: `cargo test` runs tests in parallel, and two
+        /// tests sharing one seed object made each depend on the other having run
+        /// first.
+        fn ci_config(key_label: &str) -> Pkcs11Config {
+            let library = std::env::var("SOFTHSM2_LIB")
+                .unwrap_or_else(|_| "/usr/lib/softhsm/libsofthsm2.so".into());
+            let ctx = Pkcs11::new(&library).expect("cannot load PKCS#11 library");
+            ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK))
+                .expect("cannot initialise PKCS#11");
+            Pkcs11Config {
+                library: PathBuf::from(library),
+                slot: discover_slot(&ctx),
+                pin: std::env::var("SOFTHSM2_PIN").unwrap_or_else(|_| "cleitonq1234".into()),
+                key_label: key_label.into(),
+            }
+        }
+
+        /// Imports a fixed seed under `key_label`, tolerating one left by an
+        /// earlier run so the suite is repeatable against a persistent token.
+        fn seeded_signer(key_label: &str, seed: [u8; 32]) -> Pkcs11Signer {
+            let config = ci_config(key_label);
+            if Pkcs11Signer::new(config.clone()).is_err() {
+                Pkcs11Signer::import_seed(&config, &seed)
+                    .expect("seed import failed — is SoftHSM2 configured?");
+            }
+            Pkcs11Signer::new(config).expect("Pkcs11Signer::new failed")
+        }
+
+        /// Sign and verify through a real PKCS#11 token.
+        ///
+        /// Run with: `cargo test --features pkcs11 -- --include-ignored pkcs11_`
         #[test]
         #[ignore = "requires SoftHSM2 — run in CI with softhsm2.yml workflow"]
         fn pkcs11_softhsm2_roundtrip() {
-            let lib = std::env::var("SOFTHSM2_LIB")
-                .unwrap_or_else(|_| "/usr/lib/softhsm/libsofthsm2.so".into());
-
-            let config = Pkcs11Config {
-                library:   PathBuf::from(lib),
-                slot:      0,
-                pin:       "cleitonq1234".into(),
-                key_label: "MLDSA87_TEST_SEED".into(),
-            };
-
-            // Generate a fresh seed and import it
-            let sk = SigningKey::generate();
-            // We can't easily export the seed from the high-level API here;
-            // in real ceremony tooling, the seed is generated offline.
-            // For this test, we import a known fixed seed.
-            let seed = [0x42u8; 32];
-            Pkcs11Signer::import_seed(&config, &seed)
-                .expect("seed import failed — is SoftHSM2 running?");
-
-            let signer = Pkcs11Signer::new(config).expect("Pkcs11Signer::new failed");
+            let signer = seeded_signer("MLDSA87_TEST_ROUNDTRIP", [0x42u8; 32]);
             let vk = signer.verifying_key();
 
             let packet = signer.sign(b"ARM motors=1", 1).expect("sign failed");
-            let result = vk.verify(&packet, 0);
-            assert!(result.is_some(), "signature verification failed");
-            let (payload, nonce) = result.unwrap();
+            let (payload, nonce) = vk.verify(&packet, 0).expect("signature must verify");
             assert_eq!(payload, b"ARM motors=1");
             assert_eq!(nonce, 1);
         }
 
+        /// The token-backed signer must inherit the same anti-replay behaviour as
+        /// the in-memory one: a nonce is accepted only if strictly greater than
+        /// the last one seen.
         #[test]
-        #[ignore = "requires SoftHSM2"]
+        #[ignore = "requires SoftHSM2 — run in CI with softhsm2.yml workflow"]
         fn pkcs11_replay_rejected() {
-            let lib = std::env::var("SOFTHSM2_LIB")
-                .unwrap_or_else(|_| "/usr/lib/softhsm/libsofthsm2.so".into());
-            let config = Pkcs11Config {
-                library:   PathBuf::from(lib),
-                slot:      0,
-                pin:       "cleitonq1234".into(),
-                key_label: "MLDSA87_TEST_SEED".into(),
-            };
-            let signer = Pkcs11Signer::new(config).expect("init failed");
+            let signer = seeded_signer("MLDSA87_TEST_REPLAY", [0x43u8; 32]);
             let vk = signer.verifying_key();
-            let packet = signer.sign(b"DISARM", 10).unwrap();
-            // nonce 10 not > last_accepted=10 → rejected
-            assert!(vk.verify(&packet, 10).is_none());
-            // nonce 10 > last_accepted=9 → accepted
-            assert!(vk.verify(&packet, 9).is_some());
+
+            let packet = signer.sign(b"DISARM", 10).expect("sign failed");
+            assert!(vk.verify(&packet, 10).is_none(), "nonce 10 must not pass last=10");
+            assert!(vk.verify(&packet, 9).is_some(), "nonce 10 must pass last=9");
+        }
+
+        /// A seed imported under one label must not be reachable under another —
+        /// the label is what separates one operator's key from another's on a
+        /// shared token.
+        #[test]
+        #[ignore = "requires SoftHSM2 — run in CI with softhsm2.yml workflow"]
+        fn pkcs11_unknown_label_is_rejected() {
+            let config = ci_config("MLDSA87_LABEL_THAT_DOES_NOT_EXIST");
+            assert!(
+                Pkcs11Signer::new(config).is_err(),
+                "a missing seed object must not silently produce a signer"
+            );
+        }
+
+        /// Two labels on the same token yield two independent keys.
+        #[test]
+        #[ignore = "requires SoftHSM2 — run in CI with softhsm2.yml workflow"]
+        fn pkcs11_labels_are_independent() {
+            let a = seeded_signer("MLDSA87_TEST_ROUNDTRIP", [0x42u8; 32]);
+            let b = seeded_signer("MLDSA87_TEST_REPLAY", [0x43u8; 32]);
+
+            let packet = a.sign(b"ARM motors=1", 1).expect("sign failed");
+            assert!(
+                b.verifying_key().verify(&packet, 0).is_none(),
+                "a signature from one label must not verify under another"
+            );
         }
     }
 }

@@ -15,6 +15,13 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Test fixture, not a secret: it protects an ephemeral SoftHSM2 token created
+  # and destroyed inside a throwaway runner. Kept in one place so the token
+  # initialisation and the tests cannot disagree, which is what previously made
+  # every login fail even when the slot was right.
+  SOFTHSM2_PIN: cleitonq1234
+  SOFTHSM2_SO_PIN: "00000000"
+  SOFTHSM2_LABEL: CleitonQ-CI
 
 jobs:
   pkcs11-softhsm2:
@@ -55,17 +62,27 @@ jobs:
 
       - name: Initialise SoftHSM2 token
         run: |
+          # --free, not --slot 0: softhsm2-util does not leave the token in the
+          # slot it is given. It allocates a fresh slot ID and the requested one
+          # is left uninitialised, so anything that later assumes slot 0 fails
+          # with "the specified slot ID is not valid". The tests discover the
+          # slot by token label instead of being told it.
           softhsm2-util \
             --init-token \
-            --slot 0 \
-            --label "CleitonQ-CI" \
-            --pin "${{ secrets.SOFTHSM_CI_PIN || 'cleitonq-ci-test-pin' }}" \
-            --so-pin "${{ secrets.SOFTHSM_CI_SO_PIN || '00000000' }}"
+            --free \
+            --label "$SOFTHSM2_LABEL" \
+            --pin "$SOFTHSM2_PIN" \
+            --so-pin "$SOFTHSM2_SO_PIN"
           echo "Token initialised:"
           softhsm2-util --show-slots
 
       - name: Build with pkcs11 feature
         run: cargo build --features pkcs11
+
+      # The pkcs11 feature was never linted anywhere, so warnings accumulated
+      # unseen behind a job that failed before reaching them.
+      - name: Clippy (pkcs11)
+        run: cargo clippy --features pkcs11 --all-targets -- -D warnings
 
       - name: Run PKCS#11 integration tests
         run: |
@@ -78,10 +95,19 @@ jobs:
           SOFTHSM2_CONF: /tmp/softhsm2.conf
           SOFTHSM2_LIB: /usr/lib/softhsm/libsofthsm2.so
 
-      - name: Verify no key material in environment
+      - name: Verify no unexpected key material in the environment
         run: |
-          # Ensure the CI environment does not leak the test PIN
-          env | grep -i "pin\|seed\|secret\|key" && echo "WARNING: sensitive env vars found" || echo "Clean"
+          # SOFTHSM2_PIN and SOFTHSM2_SO_PIN are declared test fixtures for an
+          # ephemeral token and are expected here. Anything else matching is not,
+          # and fails the job rather than printing a warning nobody reads.
+          leaked=$(env | grep -iE "pin|seed|secret|key" \
+                       | grep -vE "^SOFTHSM2_(PIN|SO_PIN)=" || true)
+          if [ -n "$leaked" ]; then
+            echo "::error::unexpected key material in the environment:"
+            echo "$leaked" | sed 's/=.*/=<redacted>/'
+            exit 1
+          fi
+          echo "Clean: only the declared SoftHSM2 test fixtures are present."
 
   tpm2-swtpm:
     name: TPM2 — swtpm simulator (Ubuntu x86_64)
