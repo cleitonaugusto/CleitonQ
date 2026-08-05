@@ -556,7 +556,11 @@ mod tpm2_impl {
             let auth = Auth::try_from(config.auth.as_bytes().to_vec())
                 .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
 
-            ctx.execute_with_nullauth_session(|ctx| {
+            // nv_define_space returns the handle for the index it just created.
+            // Using it directly avoids re-deriving one through tr_from_tpm_public,
+            // which reads the index's public area and fails authorisation when it
+            // is wrapped in a session it does not need.
+            let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
                 ctx.nv_define_space(Provision::Owner, Some(auth.clone()), nv_public)
             }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvDefine(e.to_string()))?;
 
@@ -567,9 +571,6 @@ mod tpm2_impl {
             // hierarchy. The auth value is registered against the ESYS handle
             // first; without it the write fails with an authorisation error even
             // though the session is present.
-            let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
-                ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvWrite(e.to_string()))?.into();
             ctx.tr_set_auth(nv_handle.into(), auth.clone())
                 .map_err(|e| Tpm2SignerError::Auth(e.to_string()))?;
 
@@ -588,9 +589,12 @@ mod tpm2_impl {
 
             let nv_index = NvIndexTpmHandle::new(config.nv_index)
                 .map_err(|e| Tpm2SignerError::NvIndex(e.to_string()))?;
-            let nv_handle: NvIndexHandle = ctx.execute_with_nullauth_session(|ctx| {
-                ctx.tr_from_tpm_public(nv_index.into())
-            }).map_err(|e: tss_esapi::Error| Tpm2SignerError::NvRead(e.to_string()))?.into();
+            // No session here: resolving a handle from its public area is not an
+            // authorised command, and wrapping it in one makes the TPM reject it.
+            let nv_handle: NvIndexHandle = ctx
+                .tr_from_tpm_public(nv_index.into())
+                .map_err(|e| Tpm2SignerError::NvRead(e.to_string()))?
+                .into();
 
             // Same as the write path: the index carries its own auth value.
             let auth = Auth::try_from(config.auth.as_bytes().to_vec())
