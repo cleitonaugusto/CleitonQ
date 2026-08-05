@@ -102,7 +102,7 @@ LEO is the constraining case: 45 KB minimum per pass, 2 kbps worst case.
 | ML-KEM-1024 ciphertext | 1568 bytes | ❌ spans 2 frames | ✅ 1 frame burst |
 | ML-DSA-87 signature | 4627 bytes | ❌ spans 5 frames | ✅ (sparse use) |
 | HMAC-SHA3-256 tag | 32 bytes | ✅ 32/1024 = 3% | ✅ |
-| SLH-DSA-SHA2-128s signature | 7856 bytes | ❌ spans 8 frames | ✅ (1/mission) |
+| SLH-DSA-SHA2-256s signature | 29792 bytes | ❌ spans 30 frames | ✅ (1/mission) |
 
 **Key finding:** ML-KEM and ML-DSA outputs do not fit in a single TC frame.
 CLEITONQ_CHUNK fragmentation (the same mechanism used for MAVLink relay-transparency)
@@ -161,15 +161,18 @@ ML-DSA-87 anchor covering the entire session:
 
 ```
 CCSDS_PQC_ANCHOR (fragmented across 5 TC frames):
+  domain          : bytes[24]           — "CLEITONQ-CCSDS-ANCHOR-v1", domain separation
   anchor_nonce    : u64      (8 bytes)
   session_start   : u64      (8 bytes)  — first pqc_nonce in this contact
   session_end     : u64      (8 bytes)  — last pqc_nonce in this contact
   cmd_count       : u32      (4 bytes)  — number of commands authenticated
   commitment      : bytes[32]           — SHA3-256(hmac_tag_0 || ... || hmac_tag_n)
-  anchor_sig      : bytes[4627]         — ML-DSA-87 over the above fields
+  sig_nonce       : u64      (8 bytes)  — signature-layer replay nonce
+  anchor_sig      : bytes[4627]         — ML-DSA-87 over all preceding fields
 
-Total: 4687 bytes → 5 TC Transfer Frames
-Uplink cost at 2 kbps: 18.7 seconds (acceptable at end of 3–12 min pass)
+Total: 4719 bytes → 5 TC Transfer Frames
+Uplink cost at 2 kbps: 19.1 seconds (4779 bytes on the wire including frame and
+fragmentation headers; acceptable at the end of a 3–12 min pass)
 ```
 
 The anchor enables post-mission audit: any third party with the ground station's
@@ -178,9 +181,14 @@ for a given contact window, without access to the symmetric session key.
 
 ### 3.4 Mission-lifetime key revocation (rare)
 
-SLH-DSA-SHA2-128s (FIPS 205) revocation certificates are transmitted once if
-the ML-DSA-87 signing key is compromised. At 7856 bytes, this requires 8 TC frames
-and is transmitted as a high-priority sequence.
+SLH-DSA-SHA2-256s (FIPS 205) revocation certificates are transmitted once if
+the ML-DSA-87 signing key is compromised. At 29792 bytes, this requires 30 TC
+frames and is transmitted as a high-priority sequence.
+
+The parameter set is deliberately SHA2-256s rather than a smaller one: this key
+is the longest-lived trust root in the system, and at NIST security category 5 it
+matches ML-DSA-87 rather than sitting below the operational path it backstops.
+The cost is paid once per mission, in the rarest event the design contemplates.
 
 ---
 
@@ -237,7 +245,7 @@ before processing.
 | CCSDS SDLS (AES-256) | ~16 bytes/cmd | ❌ | ✅ (symmetric) | ❌ |
 | Falcon-512 per-command | 666 bytes/cmd | ✅ | ❌ | ✅ |
 | SPHINCS+-SHA2-128s per-cmd | 7856 bytes/cmd | ✅ | ❌ | ✅ |
-| **CleitonQ CCSDS Adapter** | **44 bytes/cmd + 4687 bytes/pass** | **✅** | **✅** | **✅** |
+| **CleitonQ CCSDS Adapter** | **44 bytes/cmd + 4719 bytes/pass** | **✅** | **✅** | **✅** |
 
 CleitonQ's two-layer approach is the only design that satisfies all four
 requirements simultaneously within LEO link budget constraints.

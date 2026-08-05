@@ -193,7 +193,7 @@ For CCSDS Telecommand (TC) frames with uplink budgets of 2–8 kbps:
 
 - W = 1 contact window (all TC packets in one ground station pass)
 - T = contact duration (typically 240–600s for LEO)
-- One anchor per contact window (CCSDS_PQC_ANCHOR, 4687 bytes — see adapter spec)
+- One anchor per contact window (CCSDS_PQC_ANCHOR, 4719 bytes — see adapter spec)
 - Layer 1 HMAC overhead: 42 bytes per TC packet (fits in 1024-byte TC Transfer Frame)
 
 The CCSDS TC authentication extension is specified in [ccsds-pqc-adapter.md](ccsds-pqc-adapter.md).

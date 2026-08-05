@@ -2,10 +2,28 @@
 
 //! SLH-DSA (FIPS 205) stateless hash-based signatures for long-lived certificates.
 //!
-//! Uses the SHA2-128s parameter set: 32-byte verifying key, 7856-byte signature.
+//! Uses the SHA2-256s parameter set: 64-byte verifying key, 29792-byte signature.
 //! Unlike ML-DSA (lattice-based), SLH-DSA requires only hash security assumptions.
 //! This provides defense-in-depth: if lattice hardness is ever questioned,
 //! SLH-DSA revocation certificates remain secure.
+//!
+//! # Why SHA2-256s and not a smaller parameter set
+//!
+//! This key is the **longest-lived key in the system** — a trust root that must
+//! still be verifiable after the operational keys it revokes are long gone. It
+//! therefore must be at least as strong as the operational path it backstops.
+//!
+//! The operational signature is ML-DSA-87, which is NIST security category 5.
+//! SLH-DSA-SHA2-256s is also category 5, so the trust root and the fast path sit
+//! at the same level. An earlier revision of this module used SHA2-128s
+//! (category 1), which inverted that relationship: the key with the longest
+//! horizon was the weakest link, undercutting the very conservatism the
+//! hash-based scheme is here to provide.
+//!
+//! The cost of the choice is signature size — 29792 bytes against 7856 — and
+//! slower signing. Both are acceptable here precisely because this scheme is
+//! never on a per-packet path: signing happens offline (see below), rarely, and
+//! the signature is not transmitted at line rate.
 //!
 //! # Intended use
 //!
@@ -20,43 +38,43 @@
 use alloc::vec::Vec;
 
 use slh_dsa::{
-    Sha2_128s,
+    Sha2_256s,
     signature::{Signer as _, Verifier as _, Keypair as _},
 };
 
-/// Size of the SLH-DSA-SHA2-128s signing key in bytes.
-pub const SLH_SK_BYTES: usize = 64;
-/// Size of the SLH-DSA-SHA2-128s verifying key in bytes.
-pub const SLH_VK_BYTES: usize = 32;
-/// Size of an SLH-DSA-SHA2-128s signature in bytes.
-pub const SLH_SIG_BYTES: usize = 7856;
+/// Size of the SLH-DSA-SHA2-256s signing key in bytes.
+pub const SLH_SK_BYTES: usize = 128;
+/// Size of the SLH-DSA-SHA2-256s verifying key in bytes.
+pub const SLH_VK_BYTES: usize = 64;
+/// Size of an SLH-DSA-SHA2-256s signature in bytes.
+pub const SLH_SIG_BYTES: usize = 29792;
 
-/// SLH-DSA-SHA2-128s signing key for long-lived revocation certificates.
-pub struct RevocationSigner(slh_dsa::SigningKey<Sha2_128s>);
+/// SLH-DSA-SHA2-256s signing key for long-lived revocation certificates.
+pub struct RevocationSigner(slh_dsa::SigningKey<Sha2_256s>);
 
-/// SLH-DSA-SHA2-128s verifying key (distribute to all validators).
-pub struct RevocationVerifier(slh_dsa::VerifyingKey<Sha2_128s>);
+/// SLH-DSA-SHA2-256s verifying key (distribute to all validators).
+pub struct RevocationVerifier(slh_dsa::VerifyingKey<Sha2_256s>);
 
 impl RevocationSigner {
-    /// Generates a fresh SLH-DSA-SHA2-128s signing key using the OS CSPRNG.
+    /// Generates a fresh SLH-DSA-SHA2-256s signing key using the OS CSPRNG.
     #[cfg(feature = "fips205")]
     pub fn generate() -> Self {
         use rand_core::UnwrapErr;
         let mut rng = UnwrapErr(getrandom::SysRng);
-        Self(slh_dsa::SigningKey::<Sha2_128s>::new(&mut rng))
+        Self(slh_dsa::SigningKey::<Sha2_256s>::new(&mut rng))
     }
 
     /// Generates a signing key from the provided CSPRNG (embedded targets).
     pub fn generate_from_rng<R: rand_core::CryptoRng>(rng: &mut R) -> Self {
-        Self(slh_dsa::SigningKey::<Sha2_128s>::new(rng))
+        Self(slh_dsa::SigningKey::<Sha2_256s>::new(rng))
     }
 
-    /// Reconstructs a signing key from its 64-byte serialized form.
+    /// Reconstructs a signing key from its 128-byte serialized form.
     pub fn from_bytes(bytes: &[u8; SLH_SK_BYTES]) -> Option<Self> {
-        slh_dsa::SigningKey::<Sha2_128s>::try_from(bytes.as_ref()).ok().map(Self)
+        slh_dsa::SigningKey::<Sha2_256s>::try_from(bytes.as_ref()).ok().map(Self)
     }
 
-    /// Serializes the signing key to 64 bytes. **Keep secret.**
+    /// Serializes the signing key to 128 bytes. **Keep secret.**
     pub fn to_bytes(&self) -> [u8; SLH_SK_BYTES] {
         let arr = self.0.to_bytes();
         let mut out = [0u8; SLH_SK_BYTES];
@@ -69,23 +87,23 @@ impl RevocationSigner {
         RevocationVerifier(self.0.verifying_key().clone())
     }
 
-    /// Signs `message` and returns the 7856-byte SLH-DSA signature.
+    /// Signs `message` and returns the 29792-byte SLH-DSA signature.
     ///
     /// Deterministic (pure) signing variant — safe for revocation certs where
     /// the message already contains sufficient context (drone ID, timestamp).
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
-        let sig: slh_dsa::Signature<Sha2_128s> = self.0.sign(message);
+        let sig: slh_dsa::Signature<Sha2_256s> = self.0.sign(message);
         sig.to_vec()
     }
 }
 
 impl RevocationVerifier {
-    /// Reconstructs a verifying key from its 32-byte serialized form.
+    /// Reconstructs a verifying key from its 64-byte serialized form.
     pub fn from_bytes(bytes: &[u8; SLH_VK_BYTES]) -> Option<Self> {
-        slh_dsa::VerifyingKey::<Sha2_128s>::try_from(bytes.as_ref()).ok().map(Self)
+        slh_dsa::VerifyingKey::<Sha2_256s>::try_from(bytes.as_ref()).ok().map(Self)
     }
 
-    /// Serializes the verifying key to 32 bytes.
+    /// Serializes the verifying key to 64 bytes.
     pub fn to_bytes(&self) -> [u8; SLH_VK_BYTES] {
         let arr = self.0.to_bytes();
         let mut out = [0u8; SLH_VK_BYTES];
@@ -95,7 +113,7 @@ impl RevocationVerifier {
 
     /// Verifies an SLH-DSA signature. Returns `true` if valid.
     pub fn verify(&self, message: &[u8], sig: &[u8]) -> bool {
-        let Ok(parsed) = slh_dsa::Signature::<Sha2_128s>::try_from(sig) else {
+        let Ok(parsed) = slh_dsa::Signature::<Sha2_256s>::try_from(sig) else {
             return false;
         };
         self.0.verify(message, &parsed).is_ok()

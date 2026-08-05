@@ -146,8 +146,10 @@ underlying relay-transparency problem for these protocol stacks is documented
 in IETF draft-bezerra-relay-auth-transparency-00.
 
 Session keys for the MAC layer are established via ML-KEM-1024 (FIPS 203,
-NIST security category 5). Signing-key revocation uses SLH-DSA-SHA2-128s
-(FIPS 205) as a hash-based fallback independent of lattice assumptions.
+NIST security category 5). Signing-key revocation uses SLH-DSA-SHA2-256s
+(FIPS 205) as a hash-based fallback independent of lattice assumptions —
+also category 5, so the long-lived trust root is no weaker than the
+operational path it backstops.
 
 ---
 
