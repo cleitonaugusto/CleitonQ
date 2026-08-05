@@ -164,8 +164,32 @@ Total overhead: 44 bytes per TC command
 Fits in 1024-byte TC Transfer Frame: ✅ (44/1024 = 4.3%)
 ```
 
-HMAC verification on the spacecraft: 1.1 µs (Neoverse-N2); comparable or faster
-on radiation-hardened processors at equivalent clock rates.
+#### 3.2.1 Flight-side cost
+
+The spacecraft never signs and never verifies a signature. Its entire
+cryptographic workload for a contact is one ML-KEM-1024 decapsulation plus one
+HMAC verification per command. Measured on x86-64:
+
+| Operation | Where | Cost | Frequency |
+|---|---|---|---|
+| ML-KEM-1024 decapsulate | spacecraft | 209 µs | once per pass |
+| `CCSDS_PQC_CMD` verify | spacecraft | 2.4 µs | per command |
+| TC frame parse + FECF | spacecraft | 0.2 µs | per frame |
+| ML-DSA-87 anchor sign | **ground** | 858 µs | once per pass |
+| ML-DSA-87 anchor verify | **auditor** | 126 µs | after the fact |
+
+A hundred-command contact therefore costs the spacecraft about 0.43 ms of CPU,
+of which the single decapsulation is roughly half; the per-command path only
+dominates past about a hundred commands.
+
+**On flight hardware.** These are not flight-processor figures, and no scaling
+factor is offered, because we have not measured one — a LEON3 or GR740 runs at a
+fraction of this clock with a different memory system. What the numbers
+establish is margin rather than a prediction: at a hundredfold slowdown the same
+contact costs 43 ms, against a contact window measured in minutes. The
+conclusion does not depend on knowing the factor. Measuring it on
+representative hardware is open work and a natural point of collaboration with
+an agency that has such hardware.
 
 ### 3.3 Contact window anchor (once per pass)
 
