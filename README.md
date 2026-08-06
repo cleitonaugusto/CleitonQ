@@ -270,6 +270,8 @@ IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatrac
 
 MQTT is worth running for the contrast: appending past the declared length does **not** get you silently stripped there, because MQTT rides a TCP stream and the leftover bytes desynchronise it loudly. The silent failure is elsewhere — an authenticator in an MQTT 5 User Property is dropped when a broker bridges to MQTT 3.1.1, which has no property field at all. Same class, different road, and it shows the silence is a property of the transport rather than of the authentication scheme.
 
+`unsign mqtt --broker HOST:PORT` asks a real broker instead of the model, which is how the model's mistakes were found: MQTT 5 User Properties carry UTF-8 strings, so a raw binary tag cannot go in one at all, and whether an appended tag is rejected loudly or silently stalls the connection depends on the tag's own first bytes. Verified against mosquitto 2.1.2.
+
 Zero dependencies, Python 3.6+, runs in about 30 seconds. Both adapters include a built-in relay simulator; `unsign mavlink --real-relay` drives a live MAVProxy instead, and `unsign ros2` uses real rclpy when it is available.
 
 Each adapter also runs standalone: [tools/unsign_mavlink.py](tools/unsign_mavlink.py), [tools/unsign_ros2.py](tools/unsign_ros2.py), [tools/unsign_mqtt.py](tools/unsign_mqtt.py).

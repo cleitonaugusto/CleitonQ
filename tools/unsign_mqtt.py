@@ -29,10 +29,17 @@ naive append pattern is not how MQTT gets hurt.
 WHERE MQTT ACTUALLY GETS HURT
 -----------------------------
 
-MQTT 5.0 added User Properties: arbitrary key/value metadata in the variable
-header. It is the obvious place to put an authenticator, it is where a designer
-would naturally reach for, and the spec counts those bytes, so a v5 broker
-forwards them to a v5 subscriber intact.
+MQTT 5.0 added User Properties: key/value metadata in the variable header. It is
+the obvious place to put an authenticator, it is where a designer would
+naturally reach for, and the spec counts those bytes, so a v5 broker forwards
+them to a v5 subscriber intact.
+
+One constraint that is easy to miss, and that we got wrong here until a real
+broker corrected us: a User Property is a pair of UTF-8 *strings*, not a blob.
+A raw 32-byte MAC cannot go in one. Mosquitto answers "Malformed UTF-8" and
+drops the connection. A design has to text-encode the tag first, which costs
+2x in hex or 1.33x in base64 before any of the rest of this applies. The
+scenarios below use a hex-encoded tag for that reason.
 
 MQTT 3.1.1 has no properties. None. The field does not exist in the protocol.
 
@@ -58,10 +65,17 @@ they still do not survive. The precondition is really:
 
 and framing is only the most common way that happens.
 
-It also isolates what makes the failure silent. Datagram framing discards a
-short read without complaint, so the loss is silent. Stream framing cannot
-discard anything, so a length mismatch desynchronises and is caught. Silence
-comes from the transport, not from the authentication scheme.
+It also isolates what makes the failure silent, though less cleanly than we
+first wrote. Datagram framing discards a short read without complaint, so the
+loss is silent. Stream framing cannot discard anything, so a length mismatch
+desynchronises -- but a desynchronisation is not automatically visible. Measured
+against mosquitto 2.1.2, whether it surfaces depends on the appended bytes
+themselves: a leading byte that cannot start a control packet earns a
+DISCONNECT with reason 0x82, while one that reads as a plausible PUBLISH header
+leaves the broker waiting for a packet that never comes, silently, absorbing
+everything sent after it. With four bits of packet type, most random tags take
+the second path. So the transport shifts the odds rather than settling the
+question.
 
 Usage:
 
@@ -281,6 +295,9 @@ COMMAND = b'{"cmd":"move","x":1200,"y":300,"speed":"max"}'
 # but with the byte distribution of a real tag, because scenario 1 depends
 # on how the broker's parser reacts to those exact bytes.
 AUTH = hashlib.sha3_256(b"cleitonq-unsign-mqtt-demo-tag").digest()
+# User Properties carry UTF-8 strings, so the tag must be text-encoded to go in
+# one at all. Verified against mosquitto 2.1.2, which rejects the raw bytes.
+AUTH_TEXT = AUTH.hex().encode()
 
 
 def scenario_append_uncounted():
@@ -320,10 +337,10 @@ def scenario_append_counted():
 
 def scenario_user_property_v5():
     """Auth in an MQTT 5 User Property, subscriber also on v5."""
-    packet = build_publish_v5(TOPIC, COMMAND, [("auth", AUTH)])
+    packet = build_publish_v5(TOPIC, COMMAND, [("auth", AUTH_TEXT)])
     delivered, note = broker_v5_to_v5(packet)
     parsed = parse_publish_v5(delivered)
-    present = any(v == AUTH for _, v in parsed["user_properties"])
+    present = any(v == AUTH_TEXT for _, v in parsed["user_properties"])
     return {
         "name": "auth in v5 User Property, v5 subscriber",
         "sent": len(packet),
@@ -338,14 +355,14 @@ def scenario_user_property_v5():
 
 def scenario_user_property_downgrade():
     """Auth in an MQTT 5 User Property, bridged to a 3.1.1 subscriber."""
-    packet = build_publish_v5(TOPIC, COMMAND, [("auth", AUTH)])
+    packet = build_publish_v5(TOPIC, COMMAND, [("auth", AUTH_TEXT)])
     delivered, note = broker_v5_to_v311(packet)
     parsed = parse_publish_v311(delivered)
     return {
         "name": "auth in v5 User Property, bridged to v3.1.1",
         "sent": len(packet),
         "delivered": len(delivered),
-        "auth_present": AUTH in delivered,
+        "auth_present": AUTH_TEXT in delivered,
         "silent": True,
         "verdict": "FAIL",
         "detail": "3.1.1 has no property field, so it cannot be carried",
@@ -413,10 +430,10 @@ def run(show_hex: bool):
         print("  ── Wire bytes ──────────────────────────────────────────────────")
         print()
         hexdump("v5 PUBLISH with auth in a User Property",
-                build_publish_v5(TOPIC, COMMAND, [("auth", AUTH)]))
+                build_publish_v5(TOPIC, COMMAND, [("auth", AUTH_TEXT)]))
         hexdump("the same message after bridging to 3.1.1",
                 broker_v5_to_v311(
-                    build_publish_v5(TOPIC, COMMAND, [("auth", AUTH)]))[0])
+                    build_publish_v5(TOPIC, COMMAND, [("auth", AUTH_TEXT)]))[0])
 
     print("  ── What happened ───────────────────────────────────────────────")
     print()
@@ -427,9 +444,13 @@ def run(show_hex: bool):
     print("  stripped here. MQTT rides a TCP stream, so there is no datagram")
     print("  boundary to swallow the tail. The broker reads Remaining Length")
     print("  bytes, then reads your authenticator as the start of the next")
-    print("  control packet. The stream desynchronises, and the connection")
-    print("  does not survive it (MQTT 5.0 §4.13 covers the malformed case).")
-    print("  Whatever the exact error, it is loud. Loud is survivable.")
+    print("  control packet. The stream desynchronises. What that looks like")
+    print("  depends on the tag's own first bytes, and we measured both against")
+    print("  mosquitto 2.1.2: a byte that cannot begin a packet is rejected with")
+    print("  a DISCONNECT (reason 0x82) and the connection dies, while a byte")
+    print("  that reads as a plausible PUBLISH header makes the broker wait for")
+    print("  a packet that never arrives, silently, swallowing everything")
+    print("  published afterwards. Run with --broker to see both.")
     print()
     print("  The silent failure is elsewhere. MQTT 5 User Properties are the")
     print("  natural place to put an authenticator, and they work perfectly")
@@ -476,13 +497,235 @@ def run(show_hex: bool):
     return 0
 
 
+
+# ---------------------------------------------------------------------------
+# Live mode: the same questions, asked of a real broker
+# ---------------------------------------------------------------------------
+#
+# Everything above is a model. A model can be wrong, and this one was: it put a
+# raw binary tag in a User Property until mosquitto refused the connection with
+# "Malformed UTF-8". So the tool can also just ask a broker.
+#
+#   unsign mqtt --broker 127.0.0.1:1883
+#
+# Needs a broker that accepts anonymous connections and both protocol versions.
+# Any mosquitto with `allow_anonymous true` will do:
+#
+#   docker run -d -p 1883:1883 eclipse-mosquitto:2 \
+#     sh -c 'printf "listener 1883\nallow_anonymous true\n" > /c.conf; mosquitto -c /c.conf'
+
+import socket
+
+CONNECT, CONNACK, SUBSCRIBE, SUBACK = 0x10, 0x20, 0x82, 0x90
+
+
+def _read_vbi_sock(sock):
+    mult, val = 1, 0
+    while True:
+        b = sock.recv(1)
+        if not b:
+            raise ConnectionError("closed while reading length")
+        val += (b[0] & 0x7F) * mult
+        if not b[0] & 0x80:
+            return val
+        mult *= 128
+
+
+def _read_packet(sock, timeout=2.0):
+    sock.settimeout(timeout)
+    try:
+        h = sock.recv(1)
+        if not h:
+            return None
+        n = _read_vbi_sock(sock)
+        body = b""
+        while len(body) < n:
+            chunk = sock.recv(n - len(body))
+            if not chunk:
+                break
+            body += chunk
+        return h[0], body
+    except (socket.timeout, ConnectionError, OSError):
+        return None
+
+
+def _connect(addr, client_id, version):
+    """version is 4 for MQTT 3.1.1, 5 for MQTT 5.0."""
+    sock = socket.create_connection(addr, timeout=5)
+    vh = encode_string("MQTT") + bytes([version, 0x02]) + (60).to_bytes(2, "big")
+    if version == 5:
+        vh += encode_vbi(0)
+    body = vh + encode_string(client_id)
+    sock.sendall(bytes([CONNECT]) + encode_vbi(len(body)) + body)
+    pkt = _read_packet(sock)
+    if not pkt or pkt[0] & 0xF0 != CONNACK:
+        raise RuntimeError("no CONNACK for %s (v%d)" % (client_id, version))
+    if pkt[1][1] != 0:
+        raise RuntimeError("broker refused the connection, reason 0x%02x" % pkt[1][1])
+    return sock
+
+
+def _subscribe(sock, version, packet_id):
+    vh = packet_id.to_bytes(2, "big")
+    if version == 5:
+        vh += encode_vbi(0)
+    body = vh + encode_string(TOPIC) + bytes([0x00])
+    sock.sendall(bytes([SUBSCRIBE]) + encode_vbi(len(body)) + body)
+    if not _read_packet(sock):
+        raise RuntimeError("no SUBACK")
+
+
+def _delivered(body, version):
+    topic, off = decode_string(body, 0)
+    props = []
+    if version == 5:
+        plen, used = decode_vbi(body, off)
+        off += used
+        end = off + plen
+        while off < end:
+            ident = body[off]; off += 1
+            if ident == PROP_USER_PROPERTY:
+                k, off = decode_string(body, off)
+                v, off = decode_string(body, off)
+                props.append((k, v))
+            else:
+                break
+    return topic, props, body[off:]
+
+
+def run_live(addr):
+    import time
+    print("  unsign mqtt \u2014 live broker at %s:%d" % addr)
+    print("  Cleiton Augusto Correa Bezerra \u00b7 github.com/cleitonaugusto/CleitonQ")
+    print("  " + "\u2500" * 67)
+    print()
+    print("  Command: %d B     Authenticator: %d B raw, %d B hex-encoded"
+          % (len(COMMAND), len(AUTH), len(AUTH_TEXT)))
+    print()
+
+    # --- the User Property question, asked of two subscriber versions ---
+    sub5 = _connect(addr, "unsign-sub-v5", 5);   _subscribe(sub5, 5, 1)
+    sub4 = _connect(addr, "unsign-sub-v311", 4); _subscribe(sub4, 4, 2)
+    pub = _connect(addr, "unsign-pub-v5", 5)
+    time.sleep(0.3)
+    pub.sendall(build_publish_v5(TOPIC, COMMAND, [("auth", AUTH_TEXT)]))
+    time.sleep(0.5)
+
+    print("  auth in an MQTT 5 User Property")
+    for name, sock, ver in (("MQTT 5.0 subscriber", sub5, 5),
+                            ("MQTT 3.1.1 subscriber", sub4, 4)):
+        pkt = _read_packet(sock)
+        if not pkt:
+            print("    %-24s nothing delivered" % name)
+            continue
+        _, props, payload = _delivered(pkt[1], ver)
+        print("    %-24s command intact: %-5s   authenticator: %s"
+              % (name, payload == COMMAND,
+                 "present" if any(v == AUTH_TEXT for _, v in props) else "GONE"))
+    for sk in (sub5, sub4, pub):
+        sk.close()
+    print()
+
+    # --- the same authenticator, carried inside the payload ---
+    sub = _connect(addr, "unsign-sub2-v311", 4); _subscribe(sub, 4, 3)
+    pub = _connect(addr, "unsign-pub2-v5", 5)
+    time.sleep(0.3)
+    pub.sendall(build_publish_v5(TOPIC, COMMAND + AUTH))
+    time.sleep(0.5)
+    pkt = _read_packet(sub)
+    print("  auth inside the payload, MQTT 3.1.1 subscriber")
+    if pkt:
+        _, _, payload = _delivered(pkt[1], 4)
+        print("    delivered %d B, authenticator present: %s"
+              % (len(payload), AUTH in payload))
+    else:
+        print("    nothing delivered")
+    sub.close(); pub.close()
+    print()
+
+    # --- appending past Remaining Length ---
+    # Appending past Remaining Length desynchronises the stream, but what that
+    # looks like depends on the tag's own bytes, because the broker reads them
+    # as the header of the next control packet. Test both outcomes rather than
+    # assuming the convenient one.
+    print("  auth appended past Remaining Length")
+    print("    (outcome depends on the tag's first bytes, so both are tested)")
+    for tag_label, tag in (("reserved packet type 0", bytes([0x0F]) + AUTH[1:]),
+                           ("real SHA3 tag, reads as PUBLISH", AUTH)):
+        sub = _connect(addr, "unsign-sub3-%d-v311" % len(tag_label), 4)
+        _subscribe(sub, 4, 4)
+        pub = _connect(addr, "unsign-pub3-%d-v5" % len(tag_label), 5)
+        time.sleep(0.3)
+        pub.sendall(build_publish_v5(TOPIC, COMMAND))
+        time.sleep(0.3)
+        before = _read_packet(sub) is not None
+        pub.sendall(tag)
+        time.sleep(0.5)
+
+        # Detecting rejection takes care. sendall() succeeds into the local
+        # buffer even after the peer closed, so a successful write proves
+        # nothing. And an MQTT 5 broker does not just drop the socket: it sends
+        # DISCONNECT with a reason code first, so recv() returning a byte is
+        # evidence of rejection rather than of health. Treat DISCONNECT or EOF
+        # as the loud outcome; a timeout with the socket still open means the
+        # broker is sitting there waiting.
+        rejected, reason = False, None
+        pub.settimeout(1.5)
+        try:
+            head = pub.recv(1)
+            if head == b"":
+                rejected = True
+            elif head[0] & 0xF0 == 0xE0:      # DISCONNECT
+                rejected = True
+                rest = pub.recv(4)
+                reason = rest[1] if len(rest) > 1 else None
+        except socket.timeout:
+            rejected = False
+        except (ConnectionResetError, OSError):
+            rejected = True
+        closed = rejected
+        after = False
+        try:
+            pub.sendall(build_publish_v5(TOPIC, b"after-the-append"))
+            time.sleep(0.5)
+            after = _read_packet(sub) is not None
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        sub.close(); pub.close()
+
+        verdict = ("LOUD, broker rejected the stream"
+                   + ("" if reason is None else " (reason 0x%02x)" % reason)
+                   if closed else
+                   "SILENT STALL, broker waiting for a packet that never comes")
+        print("    %-33s control:%-5s  after:%-5s" % (tag_label, before, after))
+        print("      %s" % verdict)
+    print()
+    print("  Neither outcome delivers the authenticator, but only one is visible.")
+    print("  A stream transport does not make this class loud by itself: it makes")
+    print("  it loud only when the leftover bytes fail to look like a packet")
+    print("  header. When they do look like one, the broker waits, and everything")
+    print("  published afterwards is swallowed as that phantom packet's body.")
+    print()
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Does authentication survive an MQTT broker?")
     parser.add_argument(
         "--hexdump", action="store_true",
         help="print the wire bytes before and after the bridge")
+    parser.add_argument(
+        "--broker", metavar="HOST:PORT",
+        help="ask a real broker instead of the model (e.g. 127.0.0.1:1883)")
     args = parser.parse_args()
+    if args.broker:
+        host, _, port = args.broker.partition(":")
+        try:
+            return run_live((host, int(port or 1883)))
+        except (OSError, RuntimeError) as exc:
+            print("unsign mqtt: %s" % exc, file=sys.stderr)
+            return 1
     return run(args.hexdump)
 
 
