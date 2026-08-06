@@ -22,9 +22,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   authentication placed outside the length the framing counts; User Properties
   are counted and still do not survive, so the precondition is really
   authentication carried in any field the intermediary is not obligated to
-  reproduce. It also locates the silence in the transport: datagram framing
-  discards a short read without complaint, stream framing cannot discard
-  anything and so gets caught.
+  reproduce. It also locates the silence in the transport, though only partly:
+  datagram framing discards a short read without complaint, while stream framing
+  cannot discard anything and desynchronises instead. Measured against mosquitto
+  2.1.2, that desynchronisation is only sometimes visible — a leading byte that
+  cannot begin a control packet earns a DISCONNECT, one that reads as a
+  plausible PUBLISH header leaves the broker waiting silently. The transport
+  shifts the odds that somebody is told; it does not settle it.
+
+- `unsign mqtt --broker HOST:PORT` asks a real broker instead of the model.
+  Adding it found two mistakes in the model: MQTT 5 User Properties carry UTF-8
+  strings, so a raw binary tag cannot go in one at all, and the append case is
+  not reliably loud.
 
 ### Changed
 
