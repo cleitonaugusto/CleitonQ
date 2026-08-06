@@ -461,10 +461,9 @@ def main():
     args = parser.parse_args()
 
     print()
-    print("╔══════════════════════════════════════════════════════════════════╗")
-    print("║  ROS2/DDS CDR authentication-stripping PoC                      ║")
-    print("║  github.com/cleitonaugusto/CleitonQ                             ║")
-    print("╚══════════════════════════════════════════════════════════════════╝")
+    print("  unsign ros2 — does authentication survive the hop?")
+    print("  Cleiton Augusto Correa Bezerra · github.com/cleitonaugusto/CleitonQ")
+    print("  ───────────────────────────────────────────────────────────────────")
 
     if args.simulate:
         run_simulated()

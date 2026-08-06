@@ -160,10 +160,9 @@ def simulated_relay(in_addr: tuple, out_addr: tuple, ready: threading.Event):
 
 def run_demo(use_real_relay: bool, relay_in: str, relay_out: str):
     print()
-    print("╔══════════════════════════════════════════════════════════════════╗")
-    print("║  MAVLink relay authentication-stripping PoC                     ║")
-    print("║  github.com/cleitonaugusto/CleitonQ                             ║")
-    print("╚══════════════════════════════════════════════════════════════════╝")
+    print("  unsign mavlink — does authentication survive the hop?")
+    print("  Cleiton Augusto Correa Bezerra · github.com/cleitonaugusto/CleitonQ")
+    print("  ───────────────────────────────────────────────────────────────────")
 
     if use_real_relay:
         print(f"\n  Mode : REAL MAVProxy relay")
