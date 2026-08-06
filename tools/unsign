@@ -38,21 +38,45 @@ import os
 import runpy
 import sys
 
+# Each entry: script, one-line description, the framing boundary, and the
+# C1-C4 verdicts for that protocol. The four conditions are the decision
+# procedure for this class; having them here makes the procedure executable
+# rather than only prose, which is the point of `unsign --conditions`.
+#
+#   C1  boundary-delimited framing (a length field or a schema)
+#   C2  authentication placed outside what that boundary counts
+#   C3  a parse-then-reserialize intermediary on the path
+#   C4  no raw-octet integrity at the receiver
+#
+# All four holding is what makes a protocol-and-relay pair strippable. A
+# verdict here is a claim about the pair we measured, not about every
+# deployment of that protocol: see each adapter's own output for the caveats,
+# and note that mqtt is the one that does not answer yes to all four.
 ADAPTERS = {
     "mavlink": (
         "unsign_mavlink.py",
         "MAVLink v2 — authentication appended after the frame CRC, through a "
         "MAVLink-aware relay (MAVProxy, mavlink-router).",
+        "STX + 8-bit LEN field (self-delimiting frame)",
+        (True, True, True, True),
+        True,   # measured: authenticator does not reach the receiver
     ),
     "ros2": (
         "unsign_ros2.py",
         "ROS2 / DDS — authentication appended past the CDR payload, through "
         "ros1_bridge or a Fast DDS / CycloneDDS bridge.",
+        "CDR type schema (4-byte encapsulation header + typed fields)",
+        (True, True, True, True),
+        True,   # measured: authenticator does not reach the receiver
     ),
     "mqtt": (
         "unsign_mqtt.py",
         "MQTT — authentication in a v5 User Property, through a broker "
         "bridging to MQTT 3.1.1. Fails differently than the others.",
+        "Remaining Length, plus the version's property set",
+        (True, False, True, True),
+        True,   # measured against mosquitto 2.1.2: it does not reach a 3.1.1
+                # subscriber, even though C2 as worded says it should be safe
     ),
 }
 
@@ -65,14 +89,57 @@ def usage():
     print("Protocols:")
     print()
     width = max(len(name) for name in ADAPTERS)
-    for name, (_, blurb) in sorted(ADAPTERS.items()):
+    for name, (_, blurb, _b, _c, _m) in sorted(ADAPTERS.items()):
         first, rest = blurb.split(" — ", 1)
         print("  %-*s  %s" % (width, name, first))
         for line in _wrap(rest, 70):
             print("  %-*s  %s" % (width, "", line))
         print()
     print("Run 'unsign <protocol>' to test one, or 'unsign <protocol> --help'")
-    print("for the options that protocol takes.")
+    print("for the options that protocol takes. 'unsign --conditions' prints the")
+    print("C1-C4 verdict for each without running anything.")
+
+
+def conditions():
+    """Print the C1-C4 decision procedure applied to each adapter."""
+    print("  C1  boundary-delimited framing (a length field or a schema)")
+    print("  C2  authentication placed outside what that boundary counts")
+    print("  C3  a parse-then-reserialize intermediary on the path")
+    print("  C4  no raw-octet integrity at the receiver")
+    print()
+    print("  All four holding is what makes a protocol-and-relay pair")
+    print("  strippable. These are verdicts for the pairs actually measured,")
+    print("  not for every deployment of the protocol.")
+    print()
+    width = max(len(n) for n in ADAPTERS)
+    for name, (_, _blurb, boundary, cond, measured) in sorted(ADAPTERS.items()):
+        marks = "  ".join("C%d=%s" % (i + 1, "yes" if v else "no ")
+                          for i, v in enumerate(cond))
+        predicted = all(cond)
+        verdict = "predicted %s, measured %s" % (
+            "strippable" if predicted else "safe",
+            "strippable" if measured else "safe")
+        if predicted != measured:
+            verdict += "   <- they disagree"
+        print("  %-*s  %s" % (width, name, marks))
+        print("  %-*s  %s" % (width, "", verdict))
+        print("  %-*s  boundary: %s" % (width, "", boundary))
+        print()
+    print("  mqtt is where the procedure as originally worded breaks, and that")
+    print("  is worth more than the cases it gets right. C2 says the")
+    print("  authenticator has to sit outside what the boundary counts. An MQTT")
+    print("  5 User Property sits INSIDE it, so C2 says safe -- and mosquitto")
+    print("  2.1.2 strips it anyway on the way to a 3.1.1 subscriber, because")
+    print("  3.1.1 has no property field to carry it. Measured, not argued:")
+    print("  run 'unsign mqtt --broker HOST:PORT'.")
+    print()
+    print("  So the real condition is not about framing. It is:")
+    print()
+    print("      authentication carried in any field the intermediary is not")
+    print("      obligated to reproduce on the far side")
+    print()
+    print("  Framing is the most common way that happens, not the only one.")
+    print()
 
 
 def _wrap(text, width):
@@ -93,6 +160,10 @@ def main():
 
     if not argv or argv[0] in ("-h", "--help", "help"):
         usage()
+        return 0
+
+    if argv[0] in ("--conditions", "-c"):
+        conditions()
         return 0
 
     protocol = argv[0]
