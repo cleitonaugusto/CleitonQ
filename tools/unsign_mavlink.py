@@ -50,10 +50,14 @@ MAV_STX_V2       = 0xFD
 MSG_ID_CMD_LONG  = 76
 CRC_EXTRA_CMD    = 152   # CRC_EXTRA for COMMAND_LONG (msg_id 76)
 
-# Simulated auth payload sizes (choose to demonstrate scale)
+# The authenticator sizes are the primitives' own output sizes, so the labels
+# and the numbers agree. Earlier revisions used 40 and 72 here, which were the
+# CleitonQ wire overheads (tag plus an 8-byte nonce) carrying the primitives'
+# names -- while the ML-DSA row used the bare 4627. A reader checking
+# "HMAC-SHA3-256 is 32 bytes, why does this say 40?" was right to.
 AUTH_SIZES = {
-    "HMAC-SHA3-256 (40 B)":    40,
-    "Ed25519 sig  (72 B)":     72,
+    "HMAC-SHA3-256 (32 B)":     32,
+    "Ed25519 sig  (64 B)":      64,
     "ML-DSA-87 sig (4627 B)": 4627,
 }
 
