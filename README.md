@@ -266,7 +266,10 @@ IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatrac
 ./tools/unsign mavlink    # MAVLink v2 through a MAVLink-aware relay
 ./tools/unsign ros2       # ROS2 / DDS through a bridge
 ./tools/unsign mqtt       # MQTT 5.0 through a broker bridging to 3.1.1
+./tools/unsign can        # CAN / ISO-TP through a SecOC-unaware gateway
 ```
+
+`unsign can --vcan vcan0` adds a second measurement against the Linux kernel's own ISO-TP reassembler over a virtual CAN interface: the sender emits raw CAN frames whose FirstFrame declares 27 bytes while putting 59 on the bus, and the kernel delivers exactly the 27 it was promised. Nothing here reimplements reassembly — the receiver is an ordinary `CAN_ISOTP` socket, the same code path an ECU uses.
 
 MQTT is worth running for the contrast: appending past the declared length does **not** get you silently stripped there, because MQTT rides a TCP stream and the leftover bytes desynchronise it loudly. The silent failure is elsewhere — an authenticator in an MQTT 5 User Property is dropped when a broker bridges to MQTT 3.1.1, which has no property field at all. Same class, different road, and it shows the silence is a property of the transport rather than of the authentication scheme.
 

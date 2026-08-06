@@ -69,6 +69,14 @@ ADAPTERS = {
         (True, True, True, True),
         True,   # measured: authenticator does not reach the receiver
     ),
+    "can": (
+        "unsign_can.py",
+        "CAN / AUTOSAR — authentication appended past the ISO-TP declared "
+        "length or past the UDS PDU, through a SecOC-unaware gateway.",
+        "ISO-TP FirstFrame length, and the application PDU definition",
+        (True, True, True, True),
+        True,   # measured against the Linux kernel ISO-TP reassembler on vcan
+    ),
     "mqtt": (
         "unsign_mqtt.py",
         "MQTT — authentication in a v5 User Property, through a broker "

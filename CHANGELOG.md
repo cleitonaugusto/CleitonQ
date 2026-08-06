@@ -10,6 +10,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `unsign can` — CAN / ISO-TP / UDS adapter, with a live mode measured against
+  the Linux kernel's own ISO-TP reassembler over a virtual CAN interface. It
+  exists because the IETF draft claimed the class was *demonstrated* in three
+  stacks when the third had only been analysed. Now it has been run.
+
+  Two boundaries fail, one level apart: the ISO-TP FirstFrame length, and the
+  application PDU a gateway rebuilds. A third finding is not a strip at all —
+  a classical ISO-TP FirstFrame carries a 12-bit length, so 4,095 bytes is the
+  ceiling and an ML-DSA-87 signature cannot be transmitted in one at all.
+
 - `unsign mqtt` — MQTT 5.0 and 3.1.1 adapter, built and parsed byte by byte with
   no broker and no dependencies. It reports a different result from the other
   two, which is the point of having it: appending past Remaining Length is
