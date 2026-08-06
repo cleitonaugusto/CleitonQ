@@ -8,6 +8,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `unsign mqtt` — MQTT 5.0 and 3.1.1 adapter, built and parsed byte by byte with
+  no broker and no dependencies. It reports a different result from the other
+  two, which is the point of having it: appending past Remaining Length is
+  rejected loudly rather than stripped silently, because MQTT rides a TCP stream
+  and the leftover bytes desynchronise it. The silent failure is an
+  authenticator in an MQTT 5 User Property crossing a broker bridge into 3.1.1,
+  which has no property field to carry it.
+
+  This narrows the class definition. The precondition was stated as
+  authentication placed outside the length the framing counts; User Properties
+  are counted and still do not survive, so the precondition is really
+  authentication carried in any field the intermediary is not obligated to
+  reproduce. It also locates the silence in the transport: datagram framing
+  discards a short read without complaint, stream framing cannot discard
+  anything and so gets caught.
+
 ### Changed
 
 - The two relay-stripping proofs of concept are now adapters behind a single

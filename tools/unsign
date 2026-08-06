@@ -49,6 +49,11 @@ ADAPTERS = {
         "ROS2 / DDS — authentication appended past the CDR payload, through "
         "ros1_bridge or a Fast DDS / CycloneDDS bridge.",
     ),
+    "mqtt": (
+        "unsign_mqtt.py",
+        "MQTT — authentication in a v5 User Property, through a broker "
+        "bridging to MQTT 3.1.1. Fails differently than the others.",
+    ),
 }
 
 HERE = os.path.dirname(os.path.abspath(__file__))
