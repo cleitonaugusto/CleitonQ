@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- The two relay-stripping proofs of concept are now adapters behind a single
+  named tool, `tools/unsign`, invoked as `unsign mavlink` and `unsign ros2`.
+  The class needs a name that can be said out loud, and naming the probe is how
+  that happens. `tools/mavproxy_relay_strip_poc.py` and
+  `tools/ros2_bridge_strip_poc.py` were renamed to `tools/unsign_mavlink.py` and
+  `tools/unsign_ros2.py`; both still run standalone with the same flags.
+
+---
+
 ## [0.2.0] — 2026-06-22
 
 ### Security fixes

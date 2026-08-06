@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""
+unsign — does authentication survive the hop?
+
+Point it at a protocol and the relay, bridge or gateway that protocol runs
+through, and it answers one question: if a sender appends authentication to a
+message, does the receiver still have it?
+
+Often the answer is no, and nothing anywhere reports a problem. The relay parses
+the message, re-emits it from the fields it parsed, and any bytes outside the
+protocol's declared boundary are simply not re-emitted. No rule is broken. The
+relay is conformant. The receiver gets a well-formed command with the
+authentication gone and no way to tell it was ever there.
+
+That is the failure this tool detects. It needs no attacker.
+
+Usage:
+
+  unsign                     list what can be tested
+  unsign mavlink             MAVLink v2 through a MAVLink-aware relay
+  unsign ros2                ROS2 / DDS through a bridge
+
+Anything after the protocol name is passed to that adapter:
+
+  unsign mavlink --real-relay
+  unsign ros2 --simulate
+  unsign mavlink --help
+
+Exit status is 0 when the run completes, 1 when it could not.
+
+Each adapter is also runnable on its own (tools/unsign_mavlink.py,
+tools/unsign_ros2.py); this dispatcher exists so the whole thing has one name.
+
+Part of CleitonQ — github.com/cleitonaugusto/CleitonQ
+"""
+
+import os
+import runpy
+import sys
+
+ADAPTERS = {
+    "mavlink": (
+        "unsign_mavlink.py",
+        "MAVLink v2 — authentication appended after the frame CRC, through a "
+        "MAVLink-aware relay (MAVProxy, mavlink-router).",
+    ),
+    "ros2": (
+        "unsign_ros2.py",
+        "ROS2 / DDS — authentication appended past the CDR payload, through "
+        "ros1_bridge or a Fast DDS / CycloneDDS bridge.",
+    ),
+}
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def usage():
+    print(__doc__.strip().split("Usage:")[0].strip())
+    print()
+    print("Protocols:")
+    print()
+    width = max(len(name) for name in ADAPTERS)
+    for name, (_, blurb) in sorted(ADAPTERS.items()):
+        first, rest = blurb.split(" — ", 1)
+        print("  %-*s  %s" % (width, name, first))
+        for line in _wrap(rest, 70):
+            print("  %-*s  %s" % (width, "", line))
+        print()
+    print("Run 'unsign <protocol>' to test one, or 'unsign <protocol> --help'")
+    print("for the options that protocol takes.")
+
+
+def _wrap(text, width):
+    line, out = "", []
+    for word in text.split():
+        if line and len(line) + 1 + len(word) > width:
+            out.append(line)
+            line = word
+        else:
+            line = word if not line else line + " " + word
+    if line:
+        out.append(line)
+    return out
+
+
+def main():
+    argv = sys.argv[1:]
+
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        usage()
+        return 0
+
+    protocol = argv[0]
+    if protocol not in ADAPTERS:
+        print("unsign: no adapter for %r" % protocol, file=sys.stderr)
+        print("known protocols: %s" % ", ".join(sorted(ADAPTERS)), file=sys.stderr)
+        print("run 'unsign' with no arguments for the full list", file=sys.stderr)
+        return 1
+
+    script = os.path.join(HERE, ADAPTERS[protocol][0])
+    if not os.path.exists(script):
+        print("unsign: adapter missing: %s" % script, file=sys.stderr)
+        return 1
+
+    # Hand the remaining arguments to the adapter as if it had been invoked
+    # directly, so its own --help and flags keep working unchanged.
+    sys.argv = [script] + argv[1:]
+    try:
+        runpy.run_path(script, run_name="__main__")
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

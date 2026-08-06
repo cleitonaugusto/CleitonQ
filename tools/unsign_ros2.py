@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ros2_bridge_strip_poc.py
+unsign_ros2.py
 ────────────────────────
 Proof of concept: authentication material appended after a ROS2/CDR payload
 is silently stripped at the CDR schema boundary — the same structural flaw as
@@ -40,10 +40,10 @@ USAGE
 ─────
   # Mode 1 — real CycloneDDS endpoint test (requires cyclonedds pip package)
   #   pip install cyclonedds
-  python3 ros2_bridge_strip_poc.py
+  python3 unsign_ros2.py
 
   # Mode 2 — pure Python simulation (no ROS2 or cyclonedds needed)
-  python3 ros2_bridge_strip_poc.py --simulate
+  python3 unsign_ros2.py --simulate
 
 REFERENCES
 ──────────

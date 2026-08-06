@@ -48,7 +48,7 @@ Root cause: the MAVLink v2 spec defines frame length as exactly `10 + LEN + 2` b
 
 ```
 PoC (no drone required):
-python3 tools/mavproxy_relay_strip_poc.py
+./tools/unsign mavlink
 ```
 
 IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)
@@ -220,7 +220,7 @@ A formal MAVLink RFC was submitted in June 2026: [Issue #2527](https://github.co
 
 ### ROS2 / DDS
 
-The `cleitonq-ros2` package implements a parallel-topic authentication pattern for ROS2: authenticated commands travel on a `/cmd_pqc` topic alongside the original command topic. The DDS bridge relay-stripping PoC ([tools/ros2_bridge_strip_poc.py](tools/ros2_bridge_strip_poc.py)) demonstrates the same vulnerability class in ros1_bridge and Fast DDS bridge deployments.
+The `cleitonq-ros2` package implements a parallel-topic authentication pattern for ROS2: authenticated commands travel on a `/cmd_pqc` topic alongside the original command topic. `./tools/unsign ros2` demonstrates the same vulnerability class in ros1_bridge and Fast DDS bridge deployments.
 
 OMG DDS-Security PQC extension spec draft: [docs/omg/dds-security-pqc-extension-spec-v0.1.md](docs/omg/dds-security-pqc-extension-spec-v0.1.md)  
 Issue submitted: [omg-dds/dds-security#22](https://github.com/omg-dds/dds-security/issues/22)
@@ -257,17 +257,19 @@ IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatrac
 
 ## Tools
 
-### Relay-stripping proof of concept
+### `unsign` — does authentication survive the hop?
 
-`tools/mavproxy_relay_strip_poc.py` — zero-dependency Python 3.6+ script demonstrating how MAVLink-aware relays silently discard authentication bytes appended after a frame. Includes a built-in relay simulator and optional live MAVProxy mode.
+`tools/unsign` answers one question for a protocol and the relay it runs through: if the sender appends authentication to a message, does the receiver still have it? Usually not, and nothing on the path reports a problem. No attacker is involved — the relay is behaving correctly.
 
 ```
-python3 tools/mavproxy_relay_strip_poc.py
+./tools/unsign            # list what can be tested
+./tools/unsign mavlink    # MAVLink v2 through a MAVLink-aware relay
+./tools/unsign ros2       # ROS2 / DDS through a bridge
 ```
 
-### ROS2 DDS bridge PoC
+Zero dependencies, Python 3.6+, runs in about 30 seconds. Both adapters include a built-in relay simulator; `unsign mavlink --real-relay` drives a live MAVProxy instead, and `unsign ros2` uses real rclpy when it is available.
 
-`tools/ros2_bridge_strip_poc.py` — demonstrates CDR boundary stripping in ros1_bridge and CycloneDDS bridge deployments.
+Each adapter also runs standalone: [tools/unsign_mavlink.py](tools/unsign_mavlink.py), [tools/unsign_ros2.py](tools/unsign_ros2.py).
 
 ### Wireshark dissector
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mavproxy_relay_strip_poc.py
+unsign_mavlink.py
 ───────────────────────────
 Proof of concept: MAVLink-aware relays silently strip any authentication
 material appended after a valid MAVLink v2 frame.
@@ -21,11 +21,11 @@ No external dependencies required. Python 3.6+.
 USAGE
 ─────
   # Mode 1 — simulated relay (no MAVProxy needed, default)
-  python3 mavproxy_relay_strip_poc.py
+  python3 unsign_mavlink.py
 
   # Mode 2 — real MAVProxy relay
   #   Terminal 1: mavproxy.py --master udp:127.0.0.1:14550 --out udp:127.0.0.1:14551
-  #   Terminal 2: python3 mavproxy_relay_strip_poc.py --real-relay
+  #   Terminal 2: python3 unsign_mavlink.py --real-relay
 
 REFERENCES
 ──────────
