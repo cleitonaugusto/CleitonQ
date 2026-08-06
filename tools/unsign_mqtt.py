@@ -91,7 +91,9 @@ Part of CleitonQ -- github.com/cleitonaugusto/CleitonQ
 
 import argparse
 import hashlib
+import socket
 import sys
+import time
 
 # ---------------------------------------------------------------------------
 # MQTT wire primitives (MQTT 5.0 section 1.5, MQTT 3.1.1 section 1.5)
@@ -475,11 +477,12 @@ def run(show_hex: bool):
     print()
     print("  and framing is only the most common way that happens.")
     print()
-    print("  It also shows where the silence comes from. Datagram transports")
-    print("  discard a short read without complaint. Stream transports cannot")
-    print("  discard anything, so a length mismatch desynchronises and gets")
-    print("  caught. The silence is a property of the transport, not of the")
-    print("  authentication scheme.")
+    print("  It also locates where the silence comes from, though only partly.")
+    print("  Datagram transports discard a short read without complaint, so the")
+    print("  loss is silent. Stream transports cannot discard anything, so the")
+    print("  mismatch desynchronises instead -- but as measured above, a")
+    print("  desynchronisation is only sometimes visible. The transport shifts")
+    print("  the odds that somebody is told. It does not settle it.")
     print()
     print("  ── Fix ─────────────────────────────────────────────────────────")
     print()
@@ -513,8 +516,6 @@ def run(show_hex: bool):
 #
 #   docker run -d -p 1883:1883 eclipse-mosquitto:2 \
 #     sh -c 'printf "listener 1883\nallow_anonymous true\n" > /c.conf; mosquitto -c /c.conf'
-
-import socket
 
 CONNECT, CONNACK, SUBSCRIBE, SUBACK = 0x10, 0x20, 0x82, 0x90
 
@@ -560,6 +561,8 @@ def _connect(addr, client_id, version):
     pkt = _read_packet(sock)
     if not pkt or pkt[0] & 0xF0 != CONNACK:
         raise RuntimeError("no CONNACK for %s (v%d)" % (client_id, version))
+    if len(pkt[1]) < 2:
+        raise RuntimeError("truncated CONNACK for %s (%d B)" % (client_id, len(pkt[1])))
     if pkt[1][1] != 0:
         raise RuntimeError("broker refused the connection, reason 0x%02x" % pkt[1][1])
     return sock
@@ -575,26 +578,50 @@ def _subscribe(sock, version, packet_id):
         raise RuntimeError("no SUBACK")
 
 
+# Property identifier -> how many bytes its value occupies, or a marker for the
+# variable-length forms. A broker is free to add properties we did not send, and
+# they can precede ours, so the parser has to step over what it does not care
+# about instead of giving up. Getting this wrong makes the tool report a missing
+# authenticator that is actually present, which is the worst thing it could do.
+_PROP_FIXED = {0x01: 1, 0x02: 4, 0x17: 1, 0x19: 1, 0x24: 1, 0x25: 1,
+               0x27: 4, 0x13: 2, 0x21: 2, 0x22: 2, 0x23: 2, 0x29: 1, 0x2A: 1}
+_PROP_STRING = {0x03, 0x08, 0x12, 0x15, 0x1A, 0x1C, 0x1F}   # one UTF-8 string
+_PROP_BINARY = {0x09, 0x16}                                  # one binary blob
+_PROP_VBI = {0x0B}                                           # subscription id
+_PROP_PAIR = {PROP_USER_PROPERTY}                            # two UTF-8 strings
+
+
 def _delivered(body, version):
     topic, off = decode_string(body, 0)
-    props = []
+    props, unknown = [], []
     if version == 5:
         plen, used = decode_vbi(body, off)
         off += used
         end = off + plen
         while off < end:
             ident = body[off]; off += 1
-            if ident == PROP_USER_PROPERTY:
+            if ident in _PROP_PAIR:
                 k, off = decode_string(body, off)
                 v, off = decode_string(body, off)
                 props.append((k, v))
+            elif ident in _PROP_FIXED:
+                off += _PROP_FIXED[ident]
+            elif ident in _PROP_STRING or ident in _PROP_BINARY:
+                _, off = decode_string(body, off)
+            elif ident in _PROP_VBI:
+                _, used = decode_vbi(body, off)
+                off += used
             else:
+                # An identifier we do not know how to step over. We cannot
+                # guess its width without desynchronising, so stop and say so
+                # rather than silently reporting whatever we happen to have.
+                unknown.append(ident)
+                off = end
                 break
-    return topic, props, body[off:]
+    return topic, props, body[off:], unknown
 
 
 def run_live(addr):
-    import time
     print("  unsign mqtt \u2014 live broker at %s:%d" % addr)
     print("  Cleiton Augusto Correa Bezerra \u00b7 github.com/cleitonaugusto/CleitonQ")
     print("  " + "\u2500" * 67)
@@ -618,7 +645,12 @@ def run_live(addr):
         if not pkt:
             print("    %-24s nothing delivered" % name)
             continue
-        _, props, payload = _delivered(pkt[1], ver)
+        _, props, payload, unknown = _delivered(pkt[1], ver)
+        if unknown:
+            print("    %-24s INCONCLUSIVE: property 0x%02x not understood, so a"
+                  " missing authenticator cannot be distinguished from a parse"
+                  " failure" % (name, unknown[0]))
+            continue
         print("    %-24s command intact: %-5s   authenticator: %s"
               % (name, payload == COMMAND,
                  "present" if any(v == AUTH_TEXT for _, v in props) else "GONE"))
@@ -635,7 +667,7 @@ def run_live(addr):
     pkt = _read_packet(sub)
     print("  auth inside the payload, MQTT 3.1.1 subscriber")
     if pkt:
-        _, _, payload = _delivered(pkt[1], 4)
+        _, _, payload, _unknown = _delivered(pkt[1], 4)
         print("    delivered %d B, authenticator present: %s"
               % (len(payload), AUTH in payload))
     else:
@@ -650,11 +682,15 @@ def run_live(addr):
     # assuming the convenient one.
     print("  auth appended past Remaining Length")
     print("    (outcome depends on the tag's first bytes, so both are tested)")
-    for tag_label, tag in (("reserved packet type 0", bytes([0x0F]) + AUTH[1:]),
-                           ("real SHA3 tag, reads as PUBLISH", AUTH)):
-        sub = _connect(addr, "unsign-sub3-%d-v311" % len(tag_label), 4)
-        _subscribe(sub, 4, 4)
-        pub = _connect(addr, "unsign-pub3-%d-v5" % len(tag_label), 5)
+    for idx, (tag_label, tag) in enumerate((
+            ("reserved packet type 0", bytes([0x0F]) + AUTH[1:]),
+            ("real SHA3 tag, reads as PUBLISH", AUTH))):
+        # Client IDs must be distinct: a broker evicts an existing session that
+        # reconnects under the same ID, which would silently cross-contaminate
+        # the two cases. Index them rather than deriving from the label.
+        sub = _connect(addr, "unsign-sub3-%d-v311" % idx, 4)
+        _subscribe(sub, 4, 4 + idx)
+        pub = _connect(addr, "unsign-pub3-%d-v5" % idx, 5)
         time.sleep(0.3)
         pub.sendall(build_publish_v5(TOPIC, COMMAND))
         time.sleep(0.3)
