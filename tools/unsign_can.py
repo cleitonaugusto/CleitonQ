@@ -76,6 +76,11 @@ UDS_DID = 0xF190
 
 TX_ID, RX_ID = 0x7E0, 0x7E8       # the usual diagnostic pair
 
+# A classical ISO-TP FirstFrame carries a 12-bit length. Anything a sender
+# would have to declare above this cannot be transmitted at all, which is a
+# different finding from being stripped and is reported as one.
+ISOTP_MAX_CLASSIC = 0xFFF          # 4095 bytes
+
 AUTH_SIZES = [
     ("HMAC-SHA3-256", 32),
     ("Ed25519 signature", 64),
@@ -131,6 +136,13 @@ def isotp_frames(payload, declared_length=None):
     if len(payload) <= 7 and declared_length is None:
         data = bytes([SF | len(payload)]) + payload
         return [data.ljust(8, b"\x00")], True
+    if len(payload) <= 6:
+        # A FirstFrame promises ConsecutiveFrames will follow. With six or
+        # fewer payload bytes there are none to send, so we would emit a
+        # promise nobody keeps and the reassembler would wait forever. Refuse
+        # rather than transmit an invalid sequence.
+        raise ValueError("payload too short for a segmented transmission; "
+                         "use at least 7 bytes to exercise the ISO-TP path")
 
     # FirstFrame: 4 bits PCI, 12 bits length, then six payload bytes.
     if total > 0xFFF:
@@ -176,9 +188,21 @@ def send_isotp_raw(iface, payload, declared_length=None, timeout=3.0):
             raw = s.recv(16)
         except socket.timeout:
             break
-        cid, dlc = struct.unpack_from("=IB", raw, 0)
+        cid = struct.unpack_from("=I", raw, 0)[0]
         data = raw[8:8 + 8]
         if cid == RX_ID and (data[0] & 0xF0) == FC:
+            block_size = data[1]
+            if block_size:
+                # This sender streams every ConsecutiveFrame after one
+                # FlowControl, which is only correct when the receiver asked
+                # for BS=0. A receiver that asks for blocks would drop what we
+                # send, and the run would look like a successful strip. Refuse
+                # rather than report a result we did not earn.
+                s.close()
+                raise RuntimeError(
+                    "receiver requested BlockSize=%d; this sender only "
+                    "implements BS=0 streaming, so the result would not be "
+                    "trustworthy" % block_size)
             got_fc = True
             break
     if not got_fc:
@@ -254,7 +278,17 @@ def run_isotp_case(iface):
           % ("─" * 21, "─" * 8, "─" * 10, "─" * 8, "─" * 26))
 
     pdu = build_uds_pdu()
-    rows = [("baseline, no auth", 0)] + [(l, n) for l, n in AUTH_SIZES if n <= 200]
+    pdu_len = len(build_uds_pdu())
+    rows = [("baseline, no auth", 0)]
+    skipped = []
+    for label, n in AUTH_SIZES:
+        # The sender has to declare a length in the FirstFrame. What excludes a
+        # case here is that declared length not fitting 12 bits -- not an
+        # arbitrary size cut, which is what this used to be.
+        if pdu_len + n > ISOTP_MAX_CLASSIC:
+            skipped.append((label, n))
+        else:
+            rows.append((label, n))
 
     for label, n in rows:
         payload = pdu + bytes([MARKER]) * n
@@ -277,10 +311,18 @@ def run_isotp_case(iface):
         print("  %-21s  %8d  %10d  %8d  %s"
               % (label, len(payload), len(received), lost, verdict))
     print()
-    print("  The 4,627-byte case is omitted here: a 12-bit FirstFrame length")
-    print("  tops out at 4,095 bytes, so an ML-DSA-87 signature does not fit a")
-    print("  classical ISO-TP transmission at all. That is its own finding and")
-    print("  it is not a strip, so it is not reported as one.")
+    for label, n in skipped:
+        print("  %-21s  %8d  %10s  %8s  %s"
+              % (label, pdu_len + n, "n/a", "n/a",
+                 "cannot be transmitted"))
+    if skipped:
+        print()
+        print("  The cases marked n/a are not strips. A classical ISO-TP")
+        print("  FirstFrame carries a 12-bit length, so %d bytes is the most a"
+              % ISOTP_MAX_CLASSIC)
+        print("  sender can declare, and those messages cannot be formed at all.")
+        print("  Reporting them as stripped would be reporting a measurement we")
+        print("  did not make.")
     print()
 
 
