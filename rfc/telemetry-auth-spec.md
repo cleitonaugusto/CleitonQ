@@ -68,7 +68,7 @@ The Telemetry Authentication Protocol (TAP) uses two complementary layers:
              ▼ every W packets (default W=256)
 ┌─────────────────────────────────────────────────────────┐
 │  Layer 2: ML-DSA-87 Window Anchor                        │
-│  • Overhead: 4685 bytes (58 header/commitment + 4627 sig)│
+│  • Overhead: 4707 bytes (80 header/commitment + 4627 sig)│
 │  • Latency: ~962 µs (Neoverse-N2, amortized = 3.75 µs/pkt) │
 │  • Provides: non-repudiation + audit trail               │
 │  • Signs: SHA3-256 commitment of last W packet MACs      │
@@ -137,15 +137,52 @@ After every W packets (or T seconds), the ground station emits an anchor:
 
 ```
 TELEMETRY_ANCHOR packet:
+  domain          : bytes[22]           — the ASCII string "CLEITONQ-TAP-ANCHOR-v1"
   anchor_nonce    : u64      (8 bytes)  — independent nonce sequence for anchors
   window_start    : u64      (8 bytes)  — nonce of first packet in this window
   window_end      : u64      (8 bytes)  — nonce of last packet in this window
   packet_count    : u16      (2 bytes)  — number of packets in window (≤ W)
   commitment      : bytes[32]           — SHA3-256(mac_0 || mac_1 || ... || mac_{n-1})
-  anchor_signature: bytes[4627]         — ML-DSA-87(ANCHOR_KEY, anchor_nonce || window_start || window_end || packet_count || commitment)
+  anchor_signature: bytes[4627]         — ML-DSA-87(ANCHOR_KEY, domain || anchor_nonce || window_start || window_end || packet_count || commitment)
 
-Total size: 4685 bytes (8 + 8 + 8 + 2 + 32 + 4627)
+Total size: 4707 bytes (22 + 8 + 8 + 8 + 2 + 32 + 4627)
 ```
+
+**A verifier MUST reject an anchor whose signed payload is not exactly 80 bytes
+or does not begin with the domain string.** Both checks, not either one.
+
+### Why the domain string is here, and why the length check matters as much
+
+This changed on 2026-08-07, and the reasoning is worth keeping because it is the
+same reasoning the rest of this project is about.
+
+The signing routine builds what it signs by plain concatenation: the payload,
+then an eight-byte nonce. There is no length prefix, no type tag and no
+separator. So a signature over one structure is a valid signature over another
+whenever the two byte strings happen to coincide, and the only thing standing
+between the two is whether a verifier can tell them apart.
+
+Without the domain string, the signed payload here is 58 bytes of fields with
+nothing distinguishing it. Any other 58-byte structure signed by the same key
+would verify as an anchor. That is only a problem if one key signs more than one
+kind of thing, which this document does not forbid and which is what people
+actually do when a construction is offered for reuse.
+
+The CCSDS instantiation of the same construction was already protected, and not
+by its domain string alone: its decoder requires the domain string **and** an
+exact payload length, so nothing shorter, longer or differently-shaped is
+accepted. That pairing is what closes the gap, and it is the same shape as a
+protocol parser that refuses to proceed unless it consumed exactly what it was
+handed.
+
+The cost is a constant 22-byte prefix, which amortises to 0.09 bytes per message
+at W=256. The failure it prevents is a cross-context signature substitution.
+
+**Divergence to reconcile:** `draft-bezerra-anchors-command-provenance-01` gives
+this anchor as 4685 bytes and raises the question of whether the telemetry
+instantiation needs the prefix, leaving it open. This document now answers it.
+The draft will be updated; until then, this specification is the current one and
+the draft's figure is the pre-change size.
 
 **Anchor computation (ground station):**
 ```
@@ -173,8 +210,8 @@ At 100 Hz with W=256 (anchor every 2.56 seconds):
 | Component | Per-packet overhead | Effective bandwidth |
 |---|---|---|
 | Layer 1 HMAC | 42 bytes | 33.6 kbps |
-| Layer 2 anchor (amortized) | 4685 / 256 = 18.3 bytes | 14.6 kbps |
-| **Total TAP overhead** | **60.3 bytes** | **48.2 kbps** |
+| Layer 2 anchor (amortized) | 4707 / 256 = 18.4 bytes | 14.7 kbps |
+| **Total TAP overhead** | **60.4 bytes** | **48.3 kbps** |
 
 For comparison, a 100-Hz MAVLink telemetry stream with a 100-byte average payload
 consumes 80 kbps. TAP adds ~60% overhead — acceptable for Wi-Fi and LTE links,
