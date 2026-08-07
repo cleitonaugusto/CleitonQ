@@ -77,6 +77,14 @@ ADAPTERS = {
         (True, True, True, True),
         True,   # measured against the Linux kernel ISO-TP reassembler on vcan
     ),
+    "someip": (
+        "unsign_someip.py",
+        "SOME/IP — authentication appended past the 32-bit Length, through a "
+        "service gateway that rebuilds the message from parsed fields.",
+        "32-bit Length field (Request ID through payload)",
+        (True, True, True, True),
+        True,   # measured on vsomeip 3.7.0, three runs
+    ),
     "mqtt": (
         "unsign_mqtt.py",
         "MQTT — authentication in a v5 User Property, through a broker "

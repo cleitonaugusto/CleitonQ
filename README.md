@@ -267,6 +267,7 @@ IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatrac
 ./tools/unsign ros2       # ROS2 / DDS through a bridge
 ./tools/unsign mqtt       # MQTT 5.0 through a broker bridging to 3.1.1
 ./tools/unsign can        # CAN / ISO-TP through a SecOC-unaware gateway
+./tools/unsign someip     # SOME/IP through a service gateway
 ```
 
 `unsign can --vcan vcan0` adds a second measurement against the Linux kernel's own ISO-TP reassembler over a virtual CAN interface: the sender emits raw CAN frames whose FirstFrame declares 27 bytes while putting 59 on the bus, and the kernel delivers exactly the 27 it was promised. Nothing here reimplements reassembly — the receiver is an ordinary `CAN_ISOTP` socket, the same code path an ECU uses.

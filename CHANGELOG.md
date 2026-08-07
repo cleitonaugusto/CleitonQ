@@ -10,6 +10,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `unsign someip` — SOME/IP adapter. The in-process model is here; the full
+  three-node chain against a live vsomeip routing manager is not, because it
+  needs a built vsomeip and a gateway process.
+
+  It ships with two caveats the measurements forced. On vsomeip 3.7.0 the stack
+  is not silent toward the *sender*: it logs `bad length field` and returns
+  `MT_ERROR / E_MALFORMED_MESSAGE` to whoever sent the datagram, so the
+  diagnostic exists and travels away from the endpoint that has to decide. And a
+  post-quantum-sized appended signature is not stripped there at all, it is
+  dropped for exceeding `VSOMEIP_MAX_UDP_MESSAGE_SIZE`, which is an availability
+  failure rather than an authentication bypass.
+
+  A vsomeip developer has since said that the pending 3.7.5 release removes the
+  `MT_ERROR` response entirely (COVESA/vsomeip#1060). That does not move the
+  diagnostic toward the receiver, it removes it. Reported as a statement rather
+  than a measurement: the commits are from unreleased work.
+
 - `unsign can` — CAN / ISO-TP / UDS adapter, with a live mode measured against
   the Linux kernel's own ISO-TP reassembler over a virtual CAN interface. It
   exists because the IETF draft claimed the class was *demonstrated* in three
