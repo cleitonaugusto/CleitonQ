@@ -128,6 +128,14 @@ def gateway_reserialize(wire_in):
     if len(wire_in) < HEADER_FIXED:
         return b"", "datagram shorter than the fixed header"
     (length,) = struct.unpack_from(">I", wire_in, 4)
+    if length < LENGTH_PREFIX:
+        # Length counts Request ID through the payload, so it cannot be smaller
+        # than the eight octets of Request ID plus version, type and return
+        # code. vsomeip logs "SomeIP message with SomeIP message length 0!" for
+        # this, and PRS_SOMEIP_00910 requires a full header to be present. The
+        # model rejected nothing here until 2026-08-07, which made it accept
+        # what a real stack refuses.
+        return b"", "Length field smaller than the mandatory header (%d)" % length
     total = HEADER_FIXED + length
     if len(wire_in) < total:
         return b"", "Length field claims more than the datagram holds"
