@@ -1,8 +1,95 @@
 # CleitonQ
 
-**Post-quantum authentication for constrained embedded systems, in `no_std` Rust.**
+**Does authentication survive the hop?**
 
 *by Cleiton Augusto Correa Bezerra*
+
+---
+
+If you arrived here from a CVE or an advisory, this section is what you are
+looking for. The library documentation starts further down.
+
+## The short version
+
+Relays, bridges, gateways and brokers rebuild a message from the fields they
+parsed, rather than forwarding the octets they received. Authentication attached
+outside what those fields account for is not rebuilt with it. The receiver gets
+a well-formed, unauthenticated command and cannot tell it apart from one that
+was never authenticated at all.
+
+**No attacker is involved in the stripping.** The intermediary is doing exactly
+what its specification says. A system that authenticates correctly in a two-node
+test stops authenticating the moment a relay is inserted, which is the
+production topology.
+
+## Check your own stack, in about 30 seconds
+
+```
+git clone https://github.com/cleitonaugusto/CleitonQ
+cd CleitonQ
+./tools/unsign               # what can be tested
+./tools/unsign --conditions  # the four preconditions, and which stacks meet them
+./tools/unsign mavlink       # or ros2, mqtt, can, someip
+```
+
+Zero dependencies, Python 3.6+. Each adapter builds a real message, appends an
+authenticator, passes it through a relay for that protocol, and reports whether
+the authenticator arrived. Every one opens with a control that must pass first.
+
+## Does this affect you?
+
+Four conditions, and all four have to hold. `./tools/unsign --conditions` prints
+them for each protocol measured here.
+
+| | |
+|---|---|
+| **C1** | the protocol delimits messages with a length field or a schema |
+| **C2** | authentication sits outside what that boundary accounts for |
+| **C3** | something on the path parses and rebuilds, rather than forwarding octets |
+| **C4** | the receiver has no integrity check over the raw octets |
+
+If any one fails, you are not exposed by this path. MQTT is the interesting
+case: it fails C2 as originally worded and is stripped anyway, which is why the
+tool reports predicted and measured separately.
+
+## What to do about it
+
+Carry the authenticator **inside** the region the framing counts, so an
+intermediary parses it as data and rebuilds it along with everything else. If it
+does not fit, define a first-class unit that carries it rather than appending
+past the one you have.
+
+Measured at post-quantum scale: a 4,627-byte ML-DSA-87 signature carried inside
+a SOME/IP-TP payload arrives intact through a parse-and-rebuild gateway.
+Appended outside, it does not arrive at all.
+
+Operational controls that help but do not fix it: test the relay you actually
+deploy, treat a relay upgrade as a change to your authentication properties, and
+have receivers treat a missing authenticator as unauthenticated rather than as
+absent. None of these restores non-repudiation.
+
+## Where this has been measured
+
+| stack | relay | outcome |
+|---|---|---|
+| MAVLink v2 | MAVProxy | stripped |
+| ROS2 / DDS | CycloneDDS 11.0.1 | stripped |
+| SOME/IP | vsomeip 3.7.0 | stripped; error returned to the sender, not the receiver |
+| CAN / ISO-TP | Linux kernel reassembler | stripped at two boundaries |
+| MQTT 5 → 3.1.1 | mosquitto 2.1.2 | stripped on version downgrade |
+| EVM cross-chain | Wormhole contracts | **not** an instance: exact consumption enforced |
+
+The last row matters as much as the others. Where a parser refuses to proceed
+unless it consumed exactly what it was handed, this class does not apply.
+
+Full analysis, including three results that argue against the thesis:
+[doi:10.5281/zenodo.21840073](https://doi.org/10.5281/zenodo.21840073)
+
+---
+
+# The library
+
+**Post-quantum authentication for constrained embedded systems, in `no_std` Rust.**
 
 [![Crates.io](https://img.shields.io/crates/v/cleitonq.svg)](https://crates.io/crates/cleitonq)
 [![Docs.rs](https://docs.rs/cleitonq/badge.svg)](https://docs.rs/cleitonq)
@@ -11,7 +98,7 @@
 [![FIPS 204](https://img.shields.io/badge/NIST-FIPS%20204%20ML--DSA--87-blueviolet.svg)]()
 [![FIPS 205](https://img.shields.io/badge/NIST-FIPS%20205%20SLH--DSA-blueviolet.svg)]()
 [![ARM64 CI](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml/badge.svg)](https://github.com/cleitonaugusto/CleitonQ/actions/workflows/arm-bench.yml)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20776349.svg)](https://doi.org/10.5281/zenodo.20776349)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21840073.svg)](https://doi.org/10.5281/zenodo.21840073)
 [![Blog](https://img.shields.io/badge/blog-cleitonaugusto.github.io-informational.svg)](https://cleitonaugusto.github.io)
 
 ---
