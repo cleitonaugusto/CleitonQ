@@ -85,6 +85,12 @@ unless it consumed exactly what it was handed, this class does not apply.
 Full analysis, including three results that argue against the thesis:
 [doi:10.5281/zenodo.21840073](https://doi.org/10.5281/zenodo.21840073)
 
+**Writing a TARA or a cybersecurity case?** [docs/tara-threat-entry.md](docs/tara-threat-entry.md)
+is a threat catalogue entry in ISO 21434 vocabulary, written to be pasted into
+yours and licensed CC BY 4.0. It ends with the test that decides whether the
+entry applies to your item, so you can close it with evidence rather than with
+an assumption.
+
 ---
 
 # The library
