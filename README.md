@@ -29,7 +29,7 @@ git clone https://github.com/cleitonaugusto/CleitonQ
 cd CleitonQ
 ./tools/unsign               # what can be tested
 ./tools/unsign --conditions  # the four preconditions, and which stacks meet them
-./tools/unsign mavlink       # or ros2, mqtt, can, someip
+./tools/unsign mavlink       # or ros2, mqtt, can, someip, transcoder
 ```
 
 Zero dependencies, Python 3.6+. Each adapter builds a real message, appends an
@@ -77,6 +77,7 @@ absent. None of these restores non-repudiation.
 | SOME/IP | vsomeip 3.7.0 | stripped; error returned to the sender, not the receiver |
 | CAN / ISO-TP | Linux kernel reassembler | stripped at two boundaries |
 | MQTT 5 → 3.1.1 | mosquitto 2.1.2 | stripped on version downgrade |
+| gRPC-JSON transcoding | Envoy 1.31.10 · grpc-gateway 2.30.0 · ConnectRPC 1.20.0 | stripped silently by default; no reject switch on Envoy |
 | EVM cross-chain | Wormhole contracts | **not** an instance: exact consumption enforced |
 
 The last row matters as much as the others. Where a parser refuses to proceed

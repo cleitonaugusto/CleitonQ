@@ -94,6 +94,16 @@ ADAPTERS = {
         True,   # measured against mosquitto 2.1.2: it does not reach a 3.1.1
                 # subscriber, even though C2 as worded says it should be safe
     ),
+    "transcoder": (
+        "unsign_transcoder.py",
+        "gRPC-JSON transcoding — authentication in a proto field the JSON "
+        "schema does not name, through Envoy, grpc-gateway, ConnectRPC or "
+        "Cloud Endpoints.",
+        "the .proto schema (only named fields cross the JSON mapping)",
+        (True, True, True, True),
+        True,   # measured on Envoy 1.31.10, grpc-gateway 2.30.0, ConnectRPC
+                # 1.20.0 and Cloud Endpoints/ESPv2; silent drop by default on all
+    ),
 }
 
 HERE = os.path.dirname(os.path.abspath(__file__))
