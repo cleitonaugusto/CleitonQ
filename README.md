@@ -92,6 +92,12 @@ yours and licensed CC BY 4.0. It ends with the test that decides whether the
 entry applies to your item, so you can close it with evidence rather than with
 an assumption.
 
+**Medical device (FDA 524B)?** [docs/dicom-provenance-threat-entry.md](docs/dicom-provenance-threat-entry.md)
+is the same, for the medical-imaging instance: DICOM de-identification silently
+removes an object's digital signature, so downstream research and AI/ML pipelines
+lose verifiable provenance. Measured, with the test that decides whether it
+applies to your pipeline.
+
 ---
 
 # The library
