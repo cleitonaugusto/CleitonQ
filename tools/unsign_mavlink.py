@@ -11,10 +11,15 @@ Ed25519), and nonces. The relay sees a valid frame, forwards exactly those
 bytes, and discards the rest. No error, no log entry, no indication to
 either endpoint that authentication was removed.
 
-Affected relays (tested):
-  - MAVProxy  >= 1.8.x  (any version with --master/--out routing)
-  - mavlink-router      (--endpoint based routing)
-  - QGroundControl      (acting as UDP bridge)
+This script is an illustration of the mechanism. By default it runs a built-in
+simulated relay that replicates the parse-and-forward logic; with --real-relay
+it sends through a running MAVProxy instance instead.
+
+For an independent measurement against a real, third-party relay built from
+source, see tools/mavlink-router-repro/, which builds mavlink-router and measures
+what it actually does. The behaviour is not specific to one implementation: it
+follows from the MAVLink v2 frame being self-delimiting, so any conformant relay
+re-emits only what the LEN field accounts for.
 
 No external dependencies required. Python 3.6+.
 
