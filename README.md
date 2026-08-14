@@ -146,7 +146,7 @@ The case that motivated CleitonQ: **authentication bytes appended after the fram
 
 **This affects every authentication scheme that appends material outside the frame boundary**, regardless of algorithm. It is a structural property of the protocol, not an implementation bug.
 
-Measured against `mavlink-router` built from source at commit `2362c62`: appends of 32, 64, 1,075 and 4,627 bytes all vanish, the 45-byte control passes, and the router logs nothing. The 1,075-byte case is the one that isolates the mechanism — see [tools/mavlink-router-repro/](tools/mavlink-router-repro/). MAVProxy is the relay the standalone `unsign mavlink` illustration mimics; QGroundControl has not been measured.
+Measured against `mavlink-router` built from source at commit `2362c62`: appends of 32, 64, 1,075 and 4,627 bytes all vanish, the 45-byte control passes, and the router logs nothing about the discarded bytes. The 1,075-byte case is the one that isolates the mechanism — see [tools/mavlink-router-repro/](tools/mavlink-router-repro/). MAVProxy is the relay the standalone `unsign mavlink` illustration mimics; QGroundControl has not been measured.
 
 ```
 PoC (no drone required):

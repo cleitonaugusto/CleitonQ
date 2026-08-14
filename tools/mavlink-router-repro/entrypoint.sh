@@ -7,13 +7,30 @@
 set -e
 /src/mavlink-router/build/src/mavlink-routerd -t 0 -e 127.0.0.1:14551 0.0.0.0:14550 >/tmp/router.log 2>&1 &
 ROUTER_PID=$!
-sleep 1
 
-# Without this check a relay that died on startup yields a table of "nothing
-# forwarded" rows that reads like a measurement.
-if ! kill -0 "$ROUTER_PID" 2>/dev/null; then
-    echo "  mavlink-routerd did not stay up. Its log:"
+# Wait for the UDP server to be listening, not just for the process to exist.
+# A fixed sleep was a flake waiting to happen: on a loaded machine the probe
+# would send the baseline before the socket was bound, the control row would
+# read "nothing forwarded", and the run would now exit 1 — indistinguishable
+# from a real regression. Poll the log instead, and fail fast if the relay dies.
+WAITED=0
+while [ "$WAITED" -lt 100 ]; do
+    if grep -q "Opened UDP Server" /tmp/router.log 2>/dev/null; then
+        break
+    fi
+    if ! kill -0 "$ROUTER_PID" 2>/dev/null; then
+        echo "  mavlink-routerd did not stay up. Its log:"
+        sed 's/^/    /' /tmp/router.log
+        exit 1
+    fi
+    sleep 0.1
+    WAITED=$((WAITED + 1))
+done
+
+if ! grep -q "Opened UDP Server" /tmp/router.log 2>/dev/null; then
+    echo "  mavlink-routerd did not open its UDP server within 10s. Its log:"
     sed 's/^/    /' /tmp/router.log
+    kill "$ROUTER_PID" 2>/dev/null || true
     exit 1
 fi
 

@@ -23,13 +23,13 @@ COMMAND_LONG frames to the ingress and captures each one on the output endpoint.
 ## Expected output
 
 ```
-  Auth scheme              Sent  Received    Lost  Truncable   Result
-  ---------------------  ------  --------  ------  ----------  ------------------------------
-  baseline, no auth          45        45       0  no          control passes
-  HMAC-SHA3-256              77        45      32  no          auth gone
-  Ed25519 signature         109        45      64  no          auth gone
-  below read buffer        1120        45    1075  no          auth gone
-  ML-DSA-87 signature      4672        45    4627  yes         auth gone
+  Auth scheme              Sent  Received    Lost  Truncatable  Result
+  ---------------------  ------  --------  ------  -----------  ------------------------------
+  baseline, no auth          45        45       0  no           control passes
+  HMAC-SHA3-256              77        45      32  no           auth gone
+  Ed25519 signature         109        45      64  no           auth gone
+  below read buffer        1120        45    1075  no           auth gone
+  ML-DSA-87 signature      4672        45    4627  yes          auth gone
 
   Router log for the whole run:
     mavlink-router version v4-16-g2362c62
@@ -50,7 +50,7 @@ COMMAND_LONG frames to the ingress and captures each one on the output endpoint.
   The router's log is printed above so the silence is shown rather than claimed:
   four startup lines, nothing about the discarded bytes.
 
-### The `Truncable` column, and why the 1120-byte row is the one that matters
+### The `Truncatable` column, and why the 1120-byte row is the one that matters
 
 There is a rival explanation for a large append going missing, and it has
 nothing to do with MAVLink framing. `mavlink-router` reads each datagram into a
@@ -60,7 +60,7 @@ at `recvfrom`, so its tail is discarded *before* any MAVLink parsing happens.
 The observable result is identical: 45 bytes come back either way.
 
 The ML-DSA-87 row sends 4,672 bytes on the wire, so it sits in that ambiguous
-region — marked `Truncable: yes`. On its own it cannot tell the two mechanisms
+region — marked `Truncatable: yes`. On its own it cannot tell the two mechanisms
 apart, and it should not be cited as if it could.
 
 The `below read buffer` row exists to settle it. It sends **exactly 1120 bytes**:
@@ -71,13 +71,30 @@ buffer effect, and it is what carries the argument. The post-quantum row then
 shows the same outcome at realistic signature size, corroborated rather than
 load-bearing.
 
+**That isolation rests on one detail, so the probe enforces it.** `mavlink-router`
+reads into `rx_buf` with only the space that is left over, and it keeps anything
+from the first `0xFD`/`0xFE` it finds as a partial frame. The filler byte here is
+`0xA5`, which is neither, so the remainder is discarded and the buffer is empty
+when the next datagram arrives — which is the only reason the 1120-byte read is
+a full one. Swap the filler for realistic material and the property is silently
+lost: measured, with a `0xFD` filler in the preceding datagram, the 1120-byte
+case is **not forwarded at all**, while the table would still print
+`Truncatable: no`. A real ML-DSA-87 signature contains `0xFD` bytes, so that edit
+is an easy one to make by accident. `probe.py` therefore asserts the filler is
+not a start byte rather than leaving the invariant unstated.
+
 ## Exit status
 
-The harness exits **0** when the measurement is interpretable — the control
-passed and every case produced a frame — and **1** when it is not, printing how
-many cases failed. `auth gone` is the expected finding, not an error, so it does
-not affect the exit code. A run where the relay never started exits 1 rather
-than printing a table of empty rows that reads like a result.
+The harness exits **0** when the measurement is interpretable and **1** when it
+is not, printing how many cases failed. `auth gone` is the expected finding, not
+an error, so it does not affect the exit code.
+
+A case is *not* interpretable when nothing came back, when the control lost
+bytes, or when a partial amount came back (`unexpected: N B out`) — that last one
+is neither the append surviving nor the append being stripped, so it measures
+nothing and must gate the exit like the others. The container also exits 1 if
+the relay never started or never opened its UDP server, rather than printing a
+table of empty rows that reads like a result.
 
 This is not a bug in `mavlink-router`. It re-emits precisely what the MAVLink v2
 framing defines, which is correct behaviour. The failure is in assuming that

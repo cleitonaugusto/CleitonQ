@@ -30,6 +30,25 @@ RX_BUF_MAX_SIZE = 1120
 
 CASE_TIMEOUT = 3.0
 
+# The filler must not be a MAVLink start byte, and this is load-bearing rather
+# than cosmetic. mavlink-router reads into rx_buf with the space that is left
+# (`RX_BUF_MAX_SIZE - rx_buf.len`, endpoint.cpp:290) and scans for 0xFD/0xFE,
+# keeping everything from the first start byte onward as a partial frame. A
+# filler of 0xA5 matches neither, so the remainder is dropped and rx_buf is
+# empty when the next datagram arrives — which is the only reason the 1120-byte
+# case really does get a full 1120-byte read and cannot be truncated.
+#
+# Measured, because the property is easy to lose by accident: with a 0xFD filler
+# in the preceding datagram, the residue survives and the following 1120-byte
+# case is not forwarded at all, while the table would still print
+# "Truncatable: no". A real ML-DSA-87 signature contains 0xFD bytes, so swapping
+# the filler for realistic material is exactly the edit that would break this.
+FILLER = 0xA5
+assert FILLER not in (0xFD, 0xFE), (
+    "filler must not be a MAVLink start byte: leftover bytes would stay in the "
+    "relay's receive buffer and silently shorten the next read, which destroys "
+    "the isolation the 1120-byte case exists to provide")
+
 def crc_step(b, crc):
     tmp = b ^ (crc & 0xFF)
     tmp = (tmp ^ (tmp << 4)) & 0xFF
@@ -59,15 +78,15 @@ cases = [("baseline, no auth", 0), ("HMAC-SHA3-256", 32),
          ("Ed25519 signature", 64), ("below read buffer", 1075),
          ("ML-DSA-87 signature", 4627)]
 
-print("  %-21s  %6s  %8s  %6s  %-10s  %s"
-      % ("Auth scheme", "Sent", "Received", "Lost", "Truncable", "Result"))
+print("  %-21s  %6s  %8s  %6s  %-11s  %s"
+      % ("Auth scheme", "Sent", "Received", "Lost", "Truncatable", "Result"))
 print("  %s  %s  %s  %s  %s  %s"
-      % ("-"*21, "-"*6, "-"*8, "-"*6, "-"*10, "-"*30))
+      % ("-"*21, "-"*6, "-"*8, "-"*6, "-"*11, "-"*30))
 
 unmeasurable = 0
 for i, (label, n) in enumerate(cases):
     frame = build(i)
-    wire = frame + bytes([0xA5]) * n
+    wire = frame + bytes([FILLER]) * n
     tx.sendto(wire, ("127.0.0.1", 14550))
     time.sleep(0.4)
     # Whether the kernel could have truncated this datagram before mavlink-router
@@ -101,7 +120,7 @@ for i, (label, n) in enumerate(cases):
             got = d
             break
     if got is None:
-        print("  %-21s  %6d  %8s  %6s  %-10s  %s"
+        print("  %-21s  %6d  %8s  %6s  %-11s  %s"
               % (label, len(wire), "-", "-", truncable, "nothing forwarded"))
         unmeasurable += 1
         continue
@@ -115,8 +134,13 @@ for i, (label, n) in enumerate(cases):
     elif lost == 0:
         verdict = "PRESERVED - not an instance"
     else:
+        # Neither the full append nor none of it came back. That is not a
+        # measurement of anything, so it must gate the exit code like the other
+        # unusable outcomes — leaving it out was the same defect this harness
+        # was just fixed for: a value computed and then not acted on.
         verdict = "unexpected: %d B out" % len(got)
-    print("  %-21s  %6d  %8d  %6d  %-10s  %s"
+        unmeasurable += 1
+    print("  %-21s  %6d  %8d  %6d  %-11s  %s"
           % (label, len(wire), len(got), lost, truncable, verdict))
 
 if unmeasurable:
