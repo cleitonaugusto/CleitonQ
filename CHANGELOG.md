@@ -8,6 +8,57 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The MAVLink evidence claims were wider than the measurements behind them, in
+  three places, and a code review of the new repro harness found the rest.
+
+  `README.md` credited **MAVProxy** in the "Where this has been measured" table,
+  and named MAVProxy, mavlink-router and QGroundControl together as parsers that
+  do this. Only `mavlink-router` was ever run. The table now names
+  `mavlink-router @ 2362c62`, and MAVProxy is described as what the standalone
+  illustration mimics. `rfc/CLEITONQ_RFC_001.md` §4 said "in all tested
+  configurations" over the same three relays; it now marks which one was measured
+  and which two are inference.
+
+  The origin section also called the class "discovered in MAVLink v2". The
+  self-delimiting nature of MAVLink framing is not a discovery and is generally
+  known to people who work on the protocol. Reworded to say what is actually
+  contributed: the measurement, the four conditions, and the recurrence across
+  six protocol families.
+
+  ROS2: the README claimed `unsign ros2` demonstrates the class in Fast DDS
+  deployments. The adapter itself says the opposite and is right — Fast DDS
+  *rejects* oversized payloads (`RTPS_READER_HISTORY Error`), which is denial of
+  service, not silent stripping. The contrast with CycloneDDS is now stated
+  instead of flattened.
+
+- `tools/mavlink-router-repro/probe.py` could not fail. The `fail` counter was
+  never read and there was no `sys.exit`, so the harness exited 0 even when the
+  relay never started and every row read `nothing forwarded` — including the
+  control that makes the rest interpretable. It now exits 1 when any case
+  produces no usable measurement. `entrypoint.sh` could not have propagated that
+  anyway: `set -e` aborted the script before `RC=$?`, so the intended failure
+  path and the cleanup only ran on success.
+
+- `tools/mavlink-router-repro/` added a case that rules out a rival explanation.
+  mavlink-router reads datagrams into `RX_BUF_MAX_SIZE` = 1,120 bytes, so the
+  4,672-byte ML-DSA-87 case was large enough for the kernel to truncate it at
+  `recvfrom` — the bytes would be lost before any MAVLink parsing, a different
+  mechanism producing an identical table. A new case sends exactly 1,120 bytes:
+  the datagram fits the buffer, truncation is impossible, and the router still
+  re-emits only the 45 bytes the `LEN` field accounts for. That row is what
+  carries the argument; the post-quantum row corroborates it rather than
+  standing alone. The harness also prints the router's log now, so the claim
+  that the discards are silent is shown rather than asserted.
+
+- Stale pointers: the Internet-Draft links pointed at `-00` (the `-01` has been
+  published; verified), the "Technical paper" section cited only the June
+  MAVLink DOI and now leads with the class preprint
+  (`10.5281/zenodo.21840073`), the CNSA 2.0 note used the past tense for
+  January 2027, the tool list omitted `unsign transcoder`, and "both adapters"
+  described six.
+
 ### Added
 
 - `unsign someip` — SOME/IP adapter. The in-process model is here; the full

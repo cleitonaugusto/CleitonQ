@@ -156,14 +156,23 @@ Total: 1577 bytes → 7 CLEITONQ_CHUNK messages
 Relays that do not implement CleitonQ treat `CLEITONQ_CHUNK` (ID 50000) as an
 unknown message type. MAVLink relay behaviour for unknown IDs:
 
-- **MAVProxy**: forwards unknown messages if `--mavlink-version 2` is set and the
-  message ID is not in the active dialect. Default behaviour varies by version.
 - **mavlink-router**: forwards all messages that parse as valid MAVLink v2 frames.
-- **QGroundControl**: forwards unknown messages when acting as a UDP bridge.
+  **Measured** at commit `2362c62` — see `tools/mavlink-router-repro/`, which also
+  measures the converse: bytes appended *after* the frame are dropped, including a
+  1,075-byte append that fits the router's read buffer and so isolates frame
+  re-emission from any buffer effect.
+- **MAVProxy**: expected to forward unknown messages if `--mavlink-version 2` is set
+  and the message ID is not in the active dialect; default behaviour varies by
+  version. **Not measured** — `tools/unsign_mavlink.py` mimics its parse-and-forward
+  logic rather than driving it, unless run with `--real-relay`.
+- **QGroundControl**: expected to forward unknown messages when acting as a UDP
+  bridge. **Not measured.**
 
-In all tested configurations, `CLEITONQ_CHUNK` frames are forwarded intact because
-they are valid MAVLink v2 frames. This is the fundamental design property: **the
-authentication material is inside the MAVLink frame boundary, not appended after it**.
+The design property is that `CLEITONQ_CHUNK` frames are valid MAVLink v2 frames, so
+a relay forwarding by frame validity forwards them intact: **the authentication
+material is inside the MAVLink frame boundary, not appended after it**. That holds by
+construction for any conformant relay; the list above records which relays this has
+actually been run against, and which remain inference.
 
 Drones that do not implement CleitonQ silently discard unknown message IDs. No
 existing MAVLink behaviour is changed.

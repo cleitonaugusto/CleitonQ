@@ -72,7 +72,7 @@ absent. None of these restores non-repudiation.
 
 | stack | relay | outcome |
 |---|---|---|
-| MAVLink v2 | MAVProxy | stripped |
+| MAVLink v2 | mavlink-router @ 2362c62 | stripped |
 | ROS2 / DDS | CycloneDDS 11.0.1 | stripped |
 | SOME/IP | vsomeip 3.7.0 | stripped; error returned to the sender, not the receiver |
 | CAN / ISO-TP | Linux kernel reassembler | stripped at two boundaries |
@@ -132,28 +132,30 @@ The cryptographic threat to autonomous systems is not a future concern — it is
 
 **Harvest-now-decrypt-later (HNDL):** State-level adversaries record encrypted C2 traffic today to decrypt when quantum computers become available. Three independent papers published between May 2025 and March 2026 reduced the estimated cost of breaking RSA-2048 from 20 million to under 100,000 physical qubits. Median estimate for a cryptographically relevant quantum computer: **2030**. A drone designed today for a 5-year service life will operate inside that window.
 
-**CNSA 2.0 mandate:** The NSA's Commercial National Security Algorithm Suite 2.0 transitioned from guidance to **mandatory procurement requirement** in January 2027. All new National Security System acquisitions must use ML-KEM-1024 for key establishment and ML-DSA-87 for signatures. No compliant, embedded-safe, formally verified implementation for autonomous system C2 existed before CleitonQ.
+**CNSA 2.0 mandate:** The NSA's Commercial National Security Algorithm Suite 2.0 becomes a **mandatory procurement requirement** in January 2027, rather than guidance. New National Security System acquisitions must then use ML-KEM-1024 for key establishment and ML-DSA-87 for signatures. CleitonQ exists because no `no_std`-capable implementation targeting autonomous-system C2 was found when this work started; that is a search, not a proof of absence.
 
 **The standardization gap:** A 2026 systematic survey of 393 publications on PQC for autonomous and space systems identified a 3–5 year gap in standardized solutions for embedded C2 protocols. CleitonQ addresses that gap.
 
 ---
 
-## The origin case: relay-stripping in MAVLink v2
+## The origin case: MAVLink v2
 
-The motivation for CleitonQ is a vulnerability class discovered in MAVLink v2: **authentication bytes appended after the frame boundary are silently stripped by any compliant relay**.
+The case that motivated CleitonQ: **authentication bytes appended after the frame boundary are silently stripped by any conformant relay**.
 
-Root cause: the MAVLink v2 spec defines frame length as exactly `10 + LEN + 2` bytes. A compliant parser (MAVProxy, mavlink-router, QGroundControl) reads that many bytes and stops. Appended bytes — including the optional signing field from MAVLink RFC #196 — are discarded at every relay hop. The downstream receiver gets a valid, unauthenticated frame with no indication that authentication was removed.
+**This is not a defect in MAVLink, and not a bug in any relay.** The MAVLink v2 spec defines frame length as exactly `10 + LEN + 2` bytes; a conformant parser reads that many bytes and stops. That is correct behaviour, and people who work on these protocols generally know it. What this project adds is not the discovery that framing is self-delimiting — it is the measurement of what that costs an authentication scheme, the four conditions that say when it applies, and the observation that the same shape recurs across six unrelated protocol families. Appended bytes — including the optional signing field from MAVLink RFC #196 — are discarded at every relay hop, and the downstream receiver gets a valid, unauthenticated frame with no indication that authentication was removed.
 
 **This affects every authentication scheme that appends material outside the frame boundary**, regardless of algorithm. It is a structural property of the protocol, not an implementation bug.
+
+Measured against `mavlink-router` built from source at commit `2362c62`: appends of 32, 64, 1,075 and 4,627 bytes all vanish, the 45-byte control passes, and the router logs nothing. The 1,075-byte case is the one that isolates the mechanism — see [tools/mavlink-router-repro/](tools/mavlink-router-repro/). MAVProxy is the relay the standalone `unsign mavlink` illustration mimics; QGroundControl has not been measured.
 
 ```
 PoC (no drone required):
 ./tools/unsign mavlink
 ```
 
-IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)
+IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-01](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)
 
-The same relay-transparency class applies to DDS bridges in ROS2 (CDR boundary stripping), CAN gateways (DLC boundary re-serialization), and CCSDS relay nodes — documented in [Section 4 of the I-D](https://www.ietf.org/archive/id/draft-bezerra-relay-auth-transparency-00.txt).
+The same relay-transparency class applies to DDS bridges in ROS2 (CDR boundary stripping), CAN gateways (DLC boundary re-serialization), and CCSDS relay nodes — documented in [Section 4 of the I-D](https://www.ietf.org/archive/id/draft-bezerra-relay-auth-transparency-01.txt).
 
 ---
 
@@ -314,13 +316,15 @@ The two-layer telemetry approach (HMAC per-packet + ML-DSA anchor) adds a worst-
 
 ### MAVLink v2
 
-CleitonQ wraps MAVLink payloads without modifying the MAVLink framing. Authentication material travels as `CLEITONQ_CHUNK` (MSG_ID 50000) — a first-class dialect message that survives any MAVProxy / mavlink-router relay hop.
+CleitonQ wraps MAVLink payloads without modifying the MAVLink framing. Authentication material travels as `CLEITONQ_CHUNK` (MSG_ID 50000) — a first-class dialect message. Because it is a valid MAVLink v2 frame, any relay that forwards by frame validity forwards it intact; that follows from the framing rather than from a property of a particular relay. See §4 of [rfc/CLEITONQ_RFC_001.md](rfc/CLEITONQ_RFC_001.md) for which relays this has been run against and which are inference.
 
 A formal MAVLink RFC was submitted in June 2026: [Issue #2527](https://github.com/mavlink/mavlink/issues/2527) and [PR #2528](https://github.com/mavlink/mavlink/pull/2528). Wire format spec and dialect XML in [rfc/](rfc/).
 
 ### ROS2 / DDS
 
-The `cleitonq-ros2` package implements a parallel-topic authentication pattern for ROS2: authenticated commands travel on a `/cmd_pqc` topic alongside the original command topic. `./tools/unsign ros2` demonstrates the same vulnerability class in ros1_bridge and Fast DDS bridge deployments.
+The `cleitonq-ros2` package implements a parallel-topic authentication pattern for ROS2: authenticated commands travel on a `/cmd_pqc` topic alongside the original command topic. `./tools/unsign ros2` demonstrates the class against CycloneDDS 11.0.1, where the appended bytes arrive in the raw RTPS payload and are dropped at CDR deserialization, with the application callback none the wiser.
+
+Fast DDS (`rmw_fastrtps_cpp`, the default ROS2 RMW) behaves **differently, and the contrast is worth stating**: it pre-allocates reader history buffers sized to the type's maximum CDR length, so an oversized payload is rejected outright with `RTPS_READER_HISTORY Error` and the sample is dropped. That is denial of service rather than silent stripping. The authentication material fails to reach the application either way, but only CycloneDDS does it silently — two conformant DDS implementations, opposite failure modes.
 
 OMG DDS-Security PQC extension spec draft: [docs/omg/dds-security-pqc-extension-spec-v0.1.md](docs/omg/dds-security-pqc-extension-spec-v0.1.md)  
 Issue submitted: [omg-dds/dds-security#22](https://github.com/omg-dds/dds-security/issues/22)
@@ -346,10 +350,17 @@ The `alloc` feature enables heap allocation (required for ML-KEM/ML-DSA key mate
 
 ## Technical paper
 
+The current work, on the class across six protocol families:
+
+> Bezerra, C. A. C. (2026). *Authentication-Stripping in Relay-Mediated Protocols: Characterizing and Detecting a Vulnerability Class*. Zenodo.
+> [https://doi.org/10.5281/zenodo.21840073](https://doi.org/10.5281/zenodo.21840073)
+
+The earlier work it continues, on the MAVLink implementation specifically:
+
 > Bezerra, C. A. C. (2026). *Post-Quantum Authentication for MAVLink v2: A Relay-Transparent Wire Format Using ML-KEM-1024 and ML-DSA-87*. Zenodo.
 > [https://doi.org/10.5281/zenodo.20776349](https://doi.org/10.5281/zenodo.20776349)
 
-IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)  
+IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-01](https://datatracker.ietf.org/doc/draft-bezerra-relay-auth-transparency/)  
 **Blog:** [cleitonaugusto.github.io](https://cleitonaugusto.github.io)  
 **dev.to:** [Nonce Design for Safety-Critical Systems](https://dev.to/cleiton_augusto_/nonce-design-for-safety-critical-systems-lessons-from-a-post-quantum-mavlink-protocol-2kmc)
 
@@ -368,6 +379,7 @@ IETF Internet-Draft: [draft-bezerra-relay-auth-transparency-00](https://datatrac
 ./tools/unsign mqtt       # MQTT 5.0 through a broker bridging to 3.1.1
 ./tools/unsign can        # CAN / ISO-TP through a SecOC-unaware gateway
 ./tools/unsign someip     # SOME/IP through a service gateway
+./tools/unsign transcoder # gRPC-JSON through Envoy, grpc-gateway or ConnectRPC
 ```
 
 `unsign can --vcan vcan0` adds a second measurement against the Linux kernel's own ISO-TP reassembler over a virtual CAN interface: the sender emits raw CAN frames whose FirstFrame declares 27 bytes while putting 59 on the bus, and the kernel delivers exactly the 27 it was promised. Nothing here reimplements reassembly — the receiver is an ordinary `CAN_ISOTP` socket, the same code path an ECU uses.
@@ -376,9 +388,11 @@ MQTT is worth running for the contrast: appending past the declared length does 
 
 `unsign mqtt --broker HOST:PORT` asks a real broker instead of the model, which is how the model's mistakes were found: MQTT 5 User Properties carry UTF-8 strings, so a raw binary tag cannot go in one at all, and whether an appended tag is rejected loudly or silently stalls the connection depends on the tag's own first bytes. Verified against mosquitto 2.1.2.
 
-Zero dependencies, Python 3.6+, runs in about 30 seconds. Both adapters include a built-in relay simulator; `unsign mavlink --real-relay` drives a live MAVProxy instead, and `unsign ros2` uses real rclpy when it is available.
+Zero dependencies, Python 3.6+, runs in about 30 seconds. Every adapter includes a built-in relay simulator so it runs with nothing installed, and most can drive the real thing instead: `unsign mavlink --real-relay` sends through a live MAVProxy, `unsign ros2` uses real rclpy when available, `unsign mqtt --broker` asks a real broker, and `unsign can --vcan` uses the kernel's own ISO-TP reassembler.
 
-Each adapter also runs standalone: [tools/unsign_mavlink.py](tools/unsign_mavlink.py), [tools/unsign_ros2.py](tools/unsign_ros2.py), [tools/unsign_mqtt.py](tools/unsign_mqtt.py).
+**A simulator is an illustration, not evidence.** Where a result is cited as measured, it was measured against third-party software — see the table near the top of this README for which build of what. The fullest example is [tools/mavlink-router-repro/](tools/mavlink-router-repro/), which compiles `mavlink-router` from source at a pinned commit inside Docker and measures what it actually does.
+
+Each adapter also runs standalone: [unsign_mavlink.py](tools/unsign_mavlink.py), [unsign_ros2.py](tools/unsign_ros2.py), [unsign_mqtt.py](tools/unsign_mqtt.py), [unsign_can.py](tools/unsign_can.py), [unsign_someip.py](tools/unsign_someip.py), [unsign_transcoder.py](tools/unsign_transcoder.py).
 
 ### Wireshark dissector
 

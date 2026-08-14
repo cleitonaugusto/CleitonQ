@@ -17,18 +17,25 @@ docker run --rm unsign-mavlink-repro
 ```
 
 The build compiles `mavlink-router` at commit `2362c62`. The container starts it
-with `mavlink-routerd -t 0 -e 127.0.0.1:14551 0.0.0.0:14550`, then sends four
+with `mavlink-routerd -t 0 -e 127.0.0.1:14551 0.0.0.0:14550`, then sends five
 COMMAND_LONG frames to the ingress and captures each one on the output endpoint.
 
 ## Expected output
 
 ```
-  Auth scheme              Sent  Received    Lost  Result
-  ---------------------  ------  --------  ------  ------------------------------
-  baseline, no auth          45        45       0  control passes
-  HMAC-SHA3-256              77        45      32  FAIL - auth gone
-  Ed25519 signature         109        45      64  FAIL - auth gone
-  ML-DSA-87 signature      4672        45    4627  FAIL - auth gone
+  Auth scheme              Sent  Received    Lost  Truncable   Result
+  ---------------------  ------  --------  ------  ----------  ------------------------------
+  baseline, no auth          45        45       0  no          control passes
+  HMAC-SHA3-256              77        45      32  no          auth gone
+  Ed25519 signature         109        45      64  no          auth gone
+  below read buffer        1120        45    1075  no          auth gone
+  ML-DSA-87 signature      4672        45    4627  yes         auth gone
+
+  Router log for the whole run:
+    mavlink-router version v4-16-g2362c62
+    Could not open conf file '/etc/mavlink-router/main.conf' (No such file or directory)
+    Opened UDP Client [4]CLI: 127.0.0.1:14551
+    Opened UDP Server [6]CLI: 0.0.0.0:14550
 ```
 
 ## How to read it
@@ -39,8 +46,38 @@ COMMAND_LONG frames to the ingress and captures each one on the output endpoint.
 - Every other case sends the same 45-byte frame with `N` authentication bytes
   appended after the frame's CRC. The relay parses the frame, re-emits exactly
   what the `LEN` field accounts for, and the `N` appended bytes never come back.
-- The receiving end gets a well-formed, unauthenticated frame, with no error and
-  nothing in the router log about the discarded bytes.
+- The receiving end gets a well-formed, unauthenticated frame, with no error.
+  The router's log is printed above so the silence is shown rather than claimed:
+  four startup lines, nothing about the discarded bytes.
+
+### The `Truncable` column, and why the 1120-byte row is the one that matters
+
+There is a rival explanation for a large append going missing, and it has
+nothing to do with MAVLink framing. `mavlink-router` reads each datagram into a
+buffer of `RX_BUF_MAX_SIZE = MAVLINK_MAX_PACKET_LEN * 4` = **1120 bytes**
+(`src/endpoint.cpp`). A UDP datagram larger than that is truncated by the kernel
+at `recvfrom`, so its tail is discarded *before* any MAVLink parsing happens.
+The observable result is identical: 45 bytes come back either way.
+
+The ML-DSA-87 row sends 4,672 bytes on the wire, so it sits in that ambiguous
+region — marked `Truncable: yes`. On its own it cannot tell the two mechanisms
+apart, and it should not be cited as if it could.
+
+The `below read buffer` row exists to settle it. It sends **exactly 1120 bytes**:
+the whole datagram fits the read buffer, truncation is impossible, the router
+demonstrably saw every byte — and it still re-emits only the 45 the `LEN` field
+accounts for, dropping 1,075. That is frame re-emission, isolated from any
+buffer effect, and it is what carries the argument. The post-quantum row then
+shows the same outcome at realistic signature size, corroborated rather than
+load-bearing.
+
+## Exit status
+
+The harness exits **0** when the measurement is interpretable — the control
+passed and every case produced a frame — and **1** when it is not, printing how
+many cases failed. `auth gone` is the expected finding, not an error, so it does
+not affect the exit code. A run where the relay never started exits 1 rather
+than printing a table of empty rows that reads like a result.
 
 This is not a bug in `mavlink-router`. It re-emits precisely what the MAVLink v2
 framing defines, which is correct behaviour. The failure is in assuming that
@@ -59,4 +96,5 @@ from the repository root.
 
 - `Dockerfile` — builds `mavlink-router` at the pinned commit and the probe.
 - `probe.py` — sends the frames and measures what returns. No dependencies.
-- `entrypoint.sh` — starts the relay, runs the probe.
+- `entrypoint.sh` — starts the relay, checks it stayed up, runs the probe, and
+  prints the router log.
