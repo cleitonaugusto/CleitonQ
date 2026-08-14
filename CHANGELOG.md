@@ -52,6 +52,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   standing alone. The harness also prints the router's log now, so the claim
   that the discards are silent is shown rather than asserted.
 
+- The 1,120-byte case above worked for an unstated reason, which a second review
+  pass caught. `mavlink-router` keeps everything from the first `0xFD`/`0xFE` in
+  its receive buffer as a partial frame, and reads the next datagram into
+  whatever space is left. The `0xA5` filler matches neither start byte, so the
+  remainder is discarded and the buffer is empty when the next datagram arrives
+  — the only reason the 1,120-byte read is a full one. Measured: with a `0xFD`
+  filler in the preceding datagram, the 1,120-byte case is not forwarded at all,
+  while the table still prints `Truncatable: no`. A real ML-DSA-87 signature
+  contains `0xFD` bytes, so substituting realistic filler is precisely the edit
+  that would destroy the isolation without any visible sign. `probe.py` now
+  asserts the filler is not a start byte, with the mechanism documented beside
+  it.
+
+- The `unexpected: N B out` verdict did not gate the exit code, so a relay
+  returning the frame plus part of the append — neither preserved nor stripped,
+  therefore not a measurement — still exited 0. Same shape as the defect fixed
+  immediately above: a value computed and then not acted on.
+
+- The fixed `sleep 1` before probing became a liveness wait on the log's
+  `Opened UDP Server` line, capped at 10s. While the harness exited 0 regardless
+  a slow relay was invisible; now that failures exit 1 it would have been a flake
+  indistinguishable from a real regression.
+
+- `README.md` said the router "logs nothing"; it logs four startup lines. The
+  measured claim is that it logs nothing *about the discarded bytes*. Also
+  `Truncable` → `Truncatable` in the three places a user sees it.
+
 - Stale pointers: the Internet-Draft links pointed at `-00` (the `-01` has been
   published; verified), the "Technical paper" section cited only the June
   MAVLink DOI and now leads with the class preprint
