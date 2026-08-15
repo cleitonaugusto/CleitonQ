@@ -92,11 +92,18 @@ yours and licensed CC BY 4.0. It ends with the test that decides whether the
 entry applies to your item, so you can close it with evidence rather than with
 an assumption.
 
-**Medical device (FDA 524B)?** [docs/dicom-provenance-threat-entry.md](docs/dicom-provenance-threat-entry.md)
-is the same, for the medical-imaging instance: DICOM de-identification silently
-removes an object's digital signature, so downstream research and AI/ML pipelines
-lose verifiable provenance. Measured, with the test that decides whether it
-applies to your pipeline.
+**Medical device (FDA 524B)?** Two entries, same format, two independent instances
+on the same clinical data path — each measured, each ending with a test that
+decides whether it applies to your pipeline:
+
+- [docs/dicom-provenance-threat-entry.md](docs/dicom-provenance-threat-entry.md) —
+  DICOM de-identification silently removes an object's digital signature, so
+  downstream research and AI/ML pipelines lose verifiable provenance.
+- [docs/hl7-fhir-provenance-threat-entry.md](docs/hl7-fhir-provenance-threat-entry.md) —
+  HL7 v2 → FHIR conversion drops the Z-segment, which is where HL7's own guidance
+  steers integrity material. Measured on two converters, including the engine
+  behind Azure Health Data Services; an interface engine on the same path keeps it,
+  which locates the loss at the conversion step.
 
 ---
 
